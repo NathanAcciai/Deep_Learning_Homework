@@ -364,7 +364,7 @@ class Trainer(nn.Module):
         self.learning_rate= learning_rate
         self.weight_decay= weight_decay
         self.beast_model= None
-        self.device= 'cuda' if torch.cuda.is_available() else 'cpu'
+        self.device= 'cuda:1' if torch.cuda.is_available() else 'cpu'
         self.path_experiments=f'{path_exp}/Run_{date}'
         self.num_classes= num_classes
         self.file_writer= SummaryWriter(logdir)
