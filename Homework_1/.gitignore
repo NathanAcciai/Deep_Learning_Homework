@@ -1,0 +1,19 @@
+# ignora tutti i dati grezzi dei dataset pesanti
+data/cifar-10-python.tar.gz
+data/cifar-100-python.tar.gz
+
+# ignora cartelle dataset locali
+data/
+Deep_Learning_Application/Homework_1/data/
+
+# ignora pesi dei modelli
+*.pth
+*.pt
+
+# ignora file temporanei di Jupyter
+*.ipynb_checkpointsDeep_Learning_Application/Homework_1/data/
+Homework_1/data/
+Deep_Learning_Application/Homework_1/data/cifar-10-python.tar.gz
+Homework_1/data/cifar-10-python.tar.gz
+*.tar.gz
+Homework_1/data/cifar-10-batches-py/
