@@ -364,7 +364,7 @@ class Feature_Extractor(nn.Module):
     def __init__(self,model):
         super(Feature_Extractor,self).__init__()
         #In questo modo tolgo l'ultimop fc mantenendo le attivazioni del pooling
-        self.backbone= nn.Sequential(*list(model.children()[:-1]))
+        self.backbone= nn.Sequential(*list(model.children())[:-1])
 
     def forward(self, x):
         x= self.backbone(x)
@@ -798,8 +798,11 @@ class CNN_Customize(nn.Module):
 # %%
 def Load_data_Cifar100():
     transform = transforms.Compose([
-    transforms.ToTensor(),
-    transforms.Normalize((0.5,), (0.5,))
+        transforms.ToTensor(),
+        transforms.Normalize(
+            mean=[0.5071, 0.4865, 0.4409],
+            std=[0.2673, 0.2564, 0.2762]
+        )
     ])
     train_cifar100 = torchvision.datasets.CIFAR100(root='./data', train=True, download=True, transform=transform)
     test_cifar100 = torchvision.datasets.CIFAR100(root='./data', train=False, download=True, transform=transform)
@@ -831,27 +834,28 @@ def Load_model(path,in_channels, out_channels, verbose=False):
 # %%
 def Load_configuration():
     return {
-    "adam": {
-        "lr": 0.001,
-        "weight_decay": 0.001,
-        "momentum": None  # non serve per AdamW
-    },
-    "adamw": {
-        "lr": 3e-4,
-        "weight_decay": 1e-4,
-        "momentum": None  # non serve per AdamW
-    },
-    "sgd": {
-        "lr": 0.05,
-        "weight_decay": 5e-4,
-        "momentum": 0.9
-    },
-    "rmsprop": {
-        "lr": 1e-3,
-        "weight_decay": 1e-4,
-        "momentum": 0.9
+        "adam": {
+            "lr": 1e-3,
+            "weight_decay": 1e-4,
+            "momentum": None  # non serve per Adam
+        },
+        "adamw": {
+            "lr": 1e-3,
+            "weight_decay": 1e-4,
+            "momentum": None  # non serve per AdamW
+        },
+        "sgd": {
+            "lr": 1e-2,
+            "weight_decay": 1e-4,
+            "momentum": 0.9
+        },
+        "rmsprop": {
+            "lr": 1e-3,
+            "weight_decay": 1e-4,
+            "momentum": 0.9
+        }
     }
-}
+
 
 
 # %%
@@ -866,7 +870,7 @@ cifar_train, cifartest= Load_data_Cifar10()
 num_classes= 100
 
 model, hyperparametres= Load_model(path_model_CNN, in_channels, out_channels)
-block_unfreeze = ["blocks.8", "blocks.9", "fully_connected"]
+block_unfreeze = ["blocks.7","blocks.8", "blocks.9", "fully_connected"]
 optimizer=["adam","adamw", "sgd", "rmsprop"]
 classificator=["svm", "knn", "gaussian"]
 
@@ -885,6 +889,7 @@ for freeze_layers in [True,False]:
             trainer.Fine_Tuning(cifar_train,cifar_test)
     else:
         for optim in optimizer:
+            model, hyperparametres= Load_model(path_model_CNN, in_channels, out_channels)
             if optim=="adam":
                 print(f'Fine tuning CNN model only with unfreeze last layers')
                 logdirs= f'tensorboard/Reusing_Model/Fine_Tuning/Unfreeze_last_layers'

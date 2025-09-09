@@ -1,0 +1,14 @@
+Epochs,Batch size,Learning Rate,Weight Decay,Num Classes,Freeze_layers,Depth,Optimizer,Block_Unfreeze
+100,128,0.001,0.0001,100,True,10,"AdamW (
+Parameter Group 0
+    amsgrad: False
+    betas: (0.9, 0.999)
+    capturable: False
+    differentiable: False
+    eps: 1e-08
+    foreach: None
+    fused: None
+    lr: 0.001
+    maximize: False
+    weight_decay: 0.0001
+)","['blocks.8', 'blocks.9', 'fully_connected']"
