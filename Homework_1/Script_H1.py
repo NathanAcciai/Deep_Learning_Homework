@@ -186,6 +186,7 @@ class MLP(nn.Module):
 # %%
 # Start with some standard imports.
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
 from functools import reduce
 import random
@@ -204,6 +205,9 @@ import datetime
 from tqdm import tqdm
 from sklearn.metrics import accuracy_score, classification_report
 import json
+from sklearn.svm import LinearSVC
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.naive_bayes import GaussianNB
 
 # %%
 seed= 123
@@ -297,7 +301,7 @@ def get_grad_norms(model):
 
 
 # %%
-def Training_Model(model,X, file_writer,device,epochs=50,batch_size=8, learning_rate=0.001, weight_decay=0.001,study_grad=False):
+def Training_Model(model,X, file_writer,device,optimizer=None,epochs=50,batch_size=8, learning_rate=0.001, weight_decay=0.001,study_grad=False):
     total_size = len(X)
     val_size = int(0.2 * total_size)  
     train_size = total_size - val_size
@@ -310,8 +314,8 @@ def Training_Model(model,X, file_writer,device,epochs=50,batch_size=8, learning_
     ds_val = Subset(X, val_indices)
     dl_train=DataLoader(ds_train, batch_size=batch_size,shuffle=True )
     
-
-    optimizer= torch.optim.Adam(params=model.parameters(), lr= learning_rate, weight_decay=weight_decay)
+    if optimizer is None:
+        optimizer= torch.optim.Adam(params=model.parameters(), lr= learning_rate, weight_decay=weight_decay)
     criterion= torch.nn.CrossEntropyLoss()
 
     for epoch in tqdm(range(epochs), desc="Model Training"):
@@ -354,8 +358,129 @@ def Training_Model(model,X, file_writer,device,epochs=50,batch_size=8, learning_
     
 
 # %%
+# in questo metodo dovro usare la CNN come estrattore di features è usare una libreiria di scikit
+# Devo dunque richiamare i layers fino al pooling togliendo il fc
+class Feature_Extractor(nn.Module):
+    def __init__(self,model):
+        super(Feature_Extractor,self).__init__()
+        #In questo modo tolgo l'ultimop fc mantenendo le attivazioni del pooling
+        self.backbone= nn.Sequential(*list(model.children()[:-1]))
+
+    def forward(self, x):
+        x= self.backbone(x)
+        return torch.flatten(x,1)
+
+
+# %%
+def features_extractor(datloader, model,device,file_writer):
+    features=[]
+    labels= []
+    with torch.no_grad():
+        for data, label in datloader:
+            data= data.to(device)
+
+            feature= model(data)
+            features.append(feature.cpu().numpy())
+            labels.append(label)
+
+    features = np.concatenate(features, axis=0)
+    labels = np.concatenate(labels, axis=0)
+    return features,labels
+
+
+# %%
+def custom_classifier(model,train_loader, test_loader, device, file_writer,type_of_classifier="svm"):
+    model= Feature_Extractor(model)
+    features_train, labels_train=features_extractor(train_loader, model,device, file_writer)
+    features_test, labels_test=features_extractor(test_loader, model,device, file_writer)
+
+    if type_of_classifier=="svm":
+        clf= LinearSVC(max_iter=2000)
+    elif type_of_classifier=="knn":
+        clf = KNeighborsClassifier(n_neighbors=5)
+    else:
+        clf= GaussianNB()
+    clf.fit(features_train,labels_train)
+    acc= clf.score(features_test,labels_test) *100
+    file_writer.add_scalar("Accurancy", acc, 0)
+    return acc
+
+
+
+# %%
+#dunque scongelo gli ultimi due layer e ovviamente anche il fully connected
+#pooling non serve essendo che compie operazioni matematiche quindi è un layer che non contiene i pesi e non allenabile
+def fine_tuning(model, device, num_classes, optim, learning_rate,weight_decay, momentum, block_unfreeze):
+    in_features = model.fully_connected.in_features
+    model.fully_connected= nn.Linear(in_features,num_classes)
+    model = model.to(device)
+    #congelo tutti i parametri
+    for param in model.parameters():
+        param.requires_grad = False
+    #scongelo solo quelli necessari
+    for name, param in model.named_parameters():
+        if any(b in name for b in block_unfreeze):
+            param.requires_grad= True 
+    
+    trainable_params = filter(lambda p: p.requires_grad, model.parameters())
+    if optim=="adam":
+        optimizer = torch.optim.Adam(trainable_params, lr=learning_rate, weight_decay=weight_decay)
+    elif optim=="adamw":
+        optimizer = torch.optim.AdamW(trainable_params, lr=learning_rate, weight_decay=weight_decay)
+    elif optim=="sgd":
+        optimizer= torch.optim.SGD(trainable_params,lr=learning_rate,momentum=momentum, weight_decay=weight_decay)
+    else:
+        optimizer=torch.optim.RMSprop(trainable_params,lr=learning_rate,momentum=momentum, weight_decay=weight_decay)
+    
+    return model, optimizer
+               
+
+# %%
+#Per fare fine-tuning devo ovviamente cambiare qualcosa in questo caso richiesto di prendere il modello e fare feature extractor e cambiare anche qualche cosa come l'ottimizzatore
+#passo 1 con uno nuovo modello e usare la rete come features extractor 
+#passo 2 devo scongelare qualche layer e da li riaddestrarli con un nuovo classificatore 
+#quindi vorrei fare sia l'esempio con SVN-KNN o altro
+#vorrei provare quindia nche ADAMW SDG per completare 
+# nello scongelare i layer dobbiamo prendere quelli più profondi perchè i primi servono a estrarre cartteristiche delle immagini
+#quindi anhce per cifar100 essendo immagini molto simili non c'è bisogno di riaddestrare
+# invece i layer più profondi vanno a generare features più specifiche per il tipo di dataset preso.
+def Customize_model(model, X_train, X_test, file_writer,num_classes, device, 
+                    lr, weight_decay, batch_size,freeze_layers,cl,optim, momentum,
+                    block_unfreeze):
+    
+    train_loader = DataLoader(X_train, batch_size=batch_size, shuffle=False) 
+    test_loader  = DataLoader(X_test, batch_size=batch_size, shuffle=False)
+
+    if freeze_layers==False:
+        acc_cl=custom_classifier(model, train_loader,test_loader, device, file_writer,cl )
+        print(f'Accurancy of classifier {cl}: {acc_cl} /n')
+        return acc_cl, "classifier"
+    
+    else:
+        model, optimizer=fine_tuning(model,device, num_classes,optim,lr, weight_decay,momentum,block_unfreeze)
+        return (model,optimizer), "fine_tuning"
+    
+    
+
+# %%
 class Trainer(nn.Module):
-    def __init__(self,model,logdir,date, num_classes,in_channels,depth=None,epochs=50, batch_size=8, learning_rate=0.001, weight_decay=0.001,path_exp= "Simple_MLP",study_grad=False):
+    def __init__(self,model,
+                 logdir,
+                 date, 
+                 num_classes,
+                 depth=None,
+                 epochs=50, 
+                 batch_size=8, 
+                 learning_rate=0.001, 
+                 weight_decay=0.001,
+                 path_exp= "Simple_MLP",
+                 study_grad=False,
+                 freeze_layers=False,
+                 classificator= None,
+                 optimizer= None,
+                 momentum=None,
+                 block_to_unfreeze= None
+                 ):
         super(Trainer,self).__init__()
         self.model=model
         self.study_grad=study_grad
@@ -363,14 +488,17 @@ class Trainer(nn.Module):
         self.batch_size=batch_size
         self.learning_rate= learning_rate
         self.weight_decay= weight_decay
-        self.beast_model= None
-        self.device= 'cuda:1' if torch.cuda.is_available() else 'cpu'
+        self.best_model= None
+        self.device= 'cuda' if torch.cuda.is_available() else 'cpu'
         self.path_experiments=f'{path_exp}/Run_{date}'
         self.num_classes= num_classes
         self.file_writer= SummaryWriter(logdir)
-        self.in_channels= in_channels
-        self.depth= depth
-        
+        self.depth=depth
+        self.optimizer=optimizer
+        self.freeze_layers= freeze_layers
+        self.classificator=classificator
+        self.momentum= momentum
+        self.block_unfreeze= block_to_unfreeze
 
 
     def get_hyperparamtres_dict(self):
@@ -379,10 +507,21 @@ class Trainer(nn.Module):
             'Batch size':self.batch_size,
             'Learning Rate': self.learning_rate,
             'Weight Decay':self.weight_decay,
-            'Num Classes': self.num_classes
+            'Num Classes': self.num_classes,
+            'Freeze_layers': self.freeze_layers
+            
         }
         if self.depth is not None:
-            result["depth"]= self.depth
+            result["Depth"]= self.depth
+        if self.momentum is not None:
+            result["Momentum"]= self.momentum
+        if self.classificator is not None:
+            result["Classificator"]= self.classificator
+        if self.optimizer is not None:
+            result["Optimizer"]= self.optimizer
+        if self.block_unfreeze is not None:
+            result["Block_Unfreeze"]= self.block_unfreeze
+        
         return result
 
     def save_hyperparametres(self):
@@ -402,15 +541,41 @@ class Trainer(nn.Module):
             os.makedirs(self.path_experiments)
         self.save_hyperparametres()
         self.model.to(self.device)
-        self.beast_model= Training_Model(self.model,X, self.file_writer,self.device, self.epochs,self.batch_size, self.learning_rate, self.weight_decay)
-        torch.save(self.beast_model.state_dict(), os.path.join(self.path_experiments,'beast_model.pt'))
+        self.best_model= Training_Model(self.model,X, self.file_writer,self.device, self.optimizer,self.epochs,self.batch_size, self.learning_rate, self.weight_decay)
+        torch.save(self.best_model.state_dict(), os.path.join(self.path_experiments,'best_model.pt'))
+
+    def Fine_Tuning(self,X_train,X_test):
+        result, type=Customize_model(self.model, 
+                                     X_train, X_test, 
+                                     self.file_writer,
+                                     self.num_classes, 
+                                     self.device,
+                                     self.learning_rate,
+                                     self.weight_decay, 
+                                     self.batch_size,
+                                     self.freeze_layers,
+                                     self.classificator,
+                                     self.optimizer, 
+                                     self.momentum,
+                                     self.block_unfreeze)
+        
+        if type=="fine_tuning":
+            self.model, self.optimizer= result
+        self.Train(X_train)
+        self.Test(X_test)
 
     def Test(self,X, model=None):
         if model is None:
-            acc, report_dict, loss= Validation_Model(self.beast_model, X, self.device,self.batch_size)
+            acc, report_dict, loss= Validation_Model(self.best_model, X, self.device,self.batch_size)
             self.file_writer.add_scalar("Test/Accurancy", acc, 0)
             self.file_writer.add_text("Test/Classification Report", f"<pre>{report_dict}</pre>", 1)
             self.file_writer.close()
+        else:
+            acc, report_dict, loss= Validation_Model(model, X, self.device,self.batch_size)
+            self.file_writer.add_scalar("Test/Accurancy", acc, 0)
+            self.file_writer.add_text("Test/Classification Report", f"<pre>{report_dict}</pre>", 1)
+            self.file_writer.close()
+            
 
         
 
@@ -576,38 +741,37 @@ class CNN_Customize(nn.Module):
         return self.fully_connected(out)
 
 # %%
-now= datetime.datetime.now()
-data_ora_formattata = now.strftime("%d_%m_%yT%H_%M")
-name= f'run_{data_ora_formattata}'
-
-in_channels = 3
-out_channels= 64
-depths = [2 ,6 ,10]
-num_classes=10
-cifar_train, cifartest= Load_data_Cifar10()
-
-for depth in depths:
-    for use_skip in [True,False]:
-
-        if use_skip:
-            print(f'Run Training of Residual_CNN{depth} ')
-            logdir= f'tensorboard/CNN_Residual_vs_Base/{name}/Residual_depth{depth}'
-            path=f"CNN_Residual_vs_Base/Residual_depth{depth}"
-            
-            use_res=True
-        else:
-            print(f'Run Training of Simple_depth{depth} ')
-            logdir= f'tensorboard/CNN_Residual_vs_Base/{name}/Simple_depth{depth}'
-            path=f"CNN_Residual_vs_Base/Simple_depth{depth}"
-            
-            use_res=False
-        model= CNN_Customize(depth,in_channels,out_channels,num_classes,use_skip,use_res)
-        trainer= Trainer(model,logdir,data_ora_formattata,num_classes,0,depth,100,128,0.001,0.001,path)
-
-        trainer.Train(cifar_train)
-        trainer.Test(cifartest)
-
-
+#now= datetime.datetime.now()
+#data_ora_formattata = now.strftime("%d_%m_%yT%H_%M")
+#name= f'run_{data_ora_formattata}'
+#
+#in_channels = 3
+#out_channels= 64
+#depths = [2 ,6 ,10]
+#num_classes=10
+#cifar_train, cifartest= Load_data_Cifar10()
+#
+#for depth in depths:
+#    for use_skip in [True,False]:
+#
+#        if use_skip:
+#            print(f'Run Training of Residual_CNN{depth} ')
+#            logdir= f'tensorboard/CNN_Residual_vs_Base/{name}/Residual_depth{depth}'
+#            path=f"CNN_Residual_vs_Base/Residual_depth{depth}"
+#            
+#            use_res=True
+#        else:
+#            print(f'Run Training of Simple_depth{depth} ')
+#            logdir= f'tensorboard/CNN_Residual_vs_Base/{name}/Simple_depth{depth}'
+#            path=f"CNN_Residual_vs_Base/Simple_depth{depth}"
+#            
+#            use_res=False
+#        model= CNN_Customize(depth,in_channels,out_channels,num_classes,use_skip,use_res)
+#        trainer= Trainer(model,logdir,data_ora_formattata,num_classes,0,depth,100,128,0.001,0.001,path)
+#
+#        trainer.Train(cifar_train)
+#        trainer.Test(cifartest)
+#
 
 # %% [markdown]
 # -----
@@ -627,7 +791,114 @@ for depth in depths:
 # 
 # Each of these steps will require you to modify your model definition in some way. For 1, you will need to return the activations of the last fully-connected layer (or the global average pooling layer). For 2, you will need to replace the original, 10-class classifier with a new, randomly-initialized 100-class classifier.
 
+# %% [markdown]
+# ## Best model
+# Residual10 is the best model finded in the previous train
+
 # %%
+def Load_data_Cifar100():
+    transform = transforms.Compose([
+    transforms.ToTensor(),
+    transforms.Normalize((0.5,), (0.5,))
+    ])
+    train_cifar100 = torchvision.datasets.CIFAR100(root='./data', train=True, download=True, transform=transform)
+    test_cifar100 = torchvision.datasets.CIFAR100(root='./data', train=False, download=True, transform=transform)
+
+    return train_cifar100,test_cifar100
+
+
+# %%
+#load residual10 like path
+#Per caricare il modello e utilizzarlo come un extract features si puo prendere sicuramente fino all' ultimo layer e sicuramente devo portarlo a 100
+# essendo che le classi ora da predirre sono 100
+# dopo aver visto infatti la struttura sappiamo dunque di dover cambiare l'ultimo fc
+def Load_model(path,in_channels, out_channels, verbose=False):
+    hyperparam= pd.read_csv(path+"/hyperparametres.csv")
+    model = CNN_Customize(
+        hyperparam["depth"][0],
+        in_channels,
+        out_channels,
+        hyperparam["Num Classes"][0],
+        True,
+        True
+    )
+    model.load_state_dict(torch.load(path+"/beast_model.pt", map_location="cpu"))
+    if verbose:
+        print(model)
+    return model, hyperparam
+    
+
+# %%
+def Load_configuration():
+    return {
+    "adam": {
+        "lr": 0.001,
+        "weight_decay": 0.001,
+        "momentum": None  # non serve per AdamW
+    },
+    "adamw": {
+        "lr": 3e-4,
+        "weight_decay": 1e-4,
+        "momentum": None  # non serve per AdamW
+    },
+    "sgd": {
+        "lr": 0.05,
+        "weight_decay": 5e-4,
+        "momentum": 0.9
+    },
+    "rmsprop": {
+        "lr": 1e-3,
+        "weight_decay": 1e-4,
+        "momentum": 0.9
+    }
+}
+
+
+# %%
+now= datetime.datetime.now()
+data_ora_formattata = now.strftime("%d_%m_%yT%H_%M")
+name= f'run_{data_ora_formattata}'
+path_model_CNN= "CNN_Residual_vs_Base/Residual_depth10/Run_07_09_25T19_06"
+in_channels = 3
+out_channels= 64
+depth =10
+cifar_train, cifartest= Load_data_Cifar10()
+num_classes= 100
+
+model, hyperparametres= Load_model(path_model_CNN, in_channels, out_channels)
+block_unfreeze = ["blocks.8", "blocks.9", "fully_connected"]
+optimizer=["adam","adamw", "sgd", "rmsprop"]
+classificator=["svm", "knn", "gaussian"]
+
+cifar_train ,cifar_test= Load_data_Cifar100()
+
+config_optim=Load_configuration()
+
+
+for freeze_layers in [True,False]:
+    if freeze_layers==False:
+        for cl in classificator:
+            print(f'BaseLine with CNN Extract Feature with classificator: {cl}')
+            logdirs= f'tensorboard/Reusing_Model/Classification/Classificator_{cl}'
+            path= f'Reusing_Model/Classification/Classificator_{cl}'
+            trainer= Trainer(model,logdirs,data_ora_formattata,num_classes,depth,100,128,freeze_layers=freeze_layers,classificator=cl)
+            trainer.Fine_Tuning(cifar_train,cifar_test)
+    else:
+        for optim in optimizer:
+            if optim=="adam":
+                print(f'Fine tuning CNN model only with unfreeze last layers')
+                logdirs= f'tensorboard/Reusing_Model/Fine_Tuning/Unfreeze_last_layers'
+                path="Reusing_Model/Fine_Tuning/Unfreeze_last_layers"
+            else:
+                print(f'Fine_Tuning model with unfreeze layers with optimizer {optim}')
+                logdirs= f'tensorboard/Reusing_Model/Fine_Tuning/Optimizer_{optim}'
+                path=f'Reusing_Model/Fine_Tuning/Optimizer_{optim}'
+            trainer= Trainer(model,logdirs,data_ora_formattata,num_classes,depth,100,128,
+                             config_optim[optim]["lr"],config_optim[optim]["weight_decay"],
+                             path,False,freeze_layers,None,optim,config_optim[optim]["momentum"],block_unfreeze)
+            trainer.Fine_Tuning(cifar_train,cifar_test)
+
+print("finsh Fine Tuning")
 
 
 # %% [markdown]
