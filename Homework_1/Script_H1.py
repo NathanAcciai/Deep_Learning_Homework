@@ -375,6 +375,7 @@ class Feature_Extractor(nn.Module):
 def features_extractor(datloader, model,device,file_writer):
     features=[]
     labels= []
+    model.eval()
     with torch.no_grad():
         for data, label in datloader:
             data= data.to(device)
@@ -422,15 +423,14 @@ def fine_tuning(model, device, num_classes, optim, learning_rate,weight_decay, m
         if any(b in name for b in block_unfreeze):
             param.requires_grad= True 
     
-    trainable_params = filter(lambda p: p.requires_grad, model.parameters())
     if optim=="adam":
-        optimizer = torch.optim.Adam(trainable_params, lr=learning_rate, weight_decay=weight_decay)
+        optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
     elif optim=="adamw":
-        optimizer = torch.optim.AdamW(trainable_params, lr=learning_rate, weight_decay=weight_decay)
+        optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
     elif optim=="sgd":
-        optimizer= torch.optim.SGD(trainable_params,lr=learning_rate,momentum=momentum, weight_decay=weight_decay)
+        optimizer= torch.optim.SGD(model.parameters(),lr=learning_rate,momentum=momentum, weight_decay=weight_decay)
     else:
-        optimizer=torch.optim.RMSprop(trainable_params,lr=learning_rate,momentum=momentum, weight_decay=weight_decay)
+        optimizer=torch.optim.RMSprop(model.parameters(),lr=learning_rate,momentum=momentum, weight_decay=weight_decay)
     
     return model, optimizer
                
@@ -690,8 +690,8 @@ class Residual_Block_CNN(nn.Module):
         else:
             identity= x
             out= self.first_layer(x)
-            out= self.relu(x)
-            out= self.second_layer(x)
+            out= self.relu(out)
+            out= self.second_layer(out)
             out= out  + identity
             return self.relu(out)
 
@@ -767,11 +767,11 @@ class CNN_Customize(nn.Module):
 #            
 #            use_res=False
 #        model= CNN_Customize(depth,in_channels,out_channels,num_classes,use_skip,use_res)
-#        trainer= Trainer(model,logdir,data_ora_formattata,num_classes,0,depth,100,128,0.001,0.001,path)
+#        trainer= Trainer(model,logdir,data_ora_formattata,num_classes,depth,100,128,0.001,0.001,path)
 #
 #        trainer.Train(cifar_train)
 #        trainer.Test(cifartest)
-#
+
 
 # %% [markdown]
 # -----
@@ -799,10 +799,7 @@ class CNN_Customize(nn.Module):
 def Load_data_Cifar100():
     transform = transforms.Compose([
         transforms.ToTensor(),
-        transforms.Normalize(
-            mean=[0.5071, 0.4865, 0.4409],
-            std=[0.2673, 0.2564, 0.2762]
-        )
+        transforms.Normalize((0.5,), (0.5,))
     ])
     train_cifar100 = torchvision.datasets.CIFAR100(root='./data', train=True, download=True, transform=transform)
     test_cifar100 = torchvision.datasets.CIFAR100(root='./data', train=False, download=True, transform=transform)
@@ -835,13 +832,13 @@ def Load_model(path,in_channels, out_channels, verbose=False):
 def Load_configuration():
     return {
         "adam": {
-            "lr": 1e-3,
+            "lr": 1e-4,
             "weight_decay": 1e-4,
             "momentum": None  # non serve per Adam
         },
         "adamw": {
-            "lr": 1e-3,
-            "weight_decay": 1e-4,
+            "lr": 1e-4,
+            "weight_decay": 1e-3,
             "momentum": None  # non serve per AdamW
         },
         "sgd": {
@@ -870,7 +867,7 @@ cifar_train, cifartest= Load_data_Cifar10()
 num_classes= 100
 
 model, hyperparametres= Load_model(path_model_CNN, in_channels, out_channels)
-block_unfreeze = ["blocks.7","blocks.8", "blocks.9", "fully_connected"]
+block_unfreeze = [ "blocks.9", "fully_connected"]
 optimizer=["adam","adamw", "sgd", "rmsprop"]
 classificator=["svm", "knn", "gaussian"]
 
@@ -883,8 +880,8 @@ for freeze_layers in [True,False]:
     if freeze_layers==False:
         for cl in classificator:
             print(f'BaseLine with CNN Extract Feature with classificator: {cl}')
-            logdirs= f'tensorboard/Reusing_Model/Classification/Classificator_{cl}'
-            path= f'Reusing_Model/Classification/Classificator_{cl}'
+            logdirs= f'tensorboard/Reusing_Model/Classification_{name}/Classificator_{cl}'
+            path= f'Reusing_Model/Classification_{name}/Classificator_{cl}'
             trainer= Trainer(model,logdirs,data_ora_formattata,num_classes,depth,100,128,freeze_layers=freeze_layers,classificator=cl)
             trainer.Fine_Tuning(cifar_train,cifar_test)
     else:
@@ -892,19 +889,18 @@ for freeze_layers in [True,False]:
             model, hyperparametres= Load_model(path_model_CNN, in_channels, out_channels)
             if optim=="adam":
                 print(f'Fine tuning CNN model only with unfreeze last layers')
-                logdirs= f'tensorboard/Reusing_Model/Fine_Tuning/Unfreeze_last_layers'
-                path="Reusing_Model/Fine_Tuning/Unfreeze_last_layers"
+                logdirs= f'tensorboard/Reusing_Model/Fine_Tuning_{name}/Unfreeze_last_layers'
+                path=f'Reusing_Model/Fine_Tuning_{name}/Unfreeze_last_layers'
             else:
                 print(f'Fine_Tuning model with unfreeze layers with optimizer {optim}')
-                logdirs= f'tensorboard/Reusing_Model/Fine_Tuning/Optimizer_{optim}'
-                path=f'Reusing_Model/Fine_Tuning/Optimizer_{optim}'
+                logdirs= f'tensorboard/Reusing_Model/Fine_Tuning_{name}/Optimizer_{optim}'
+                path=f'Reusing_Model/Fine_Tuning_{name}/Optimizer_{optim}'
             trainer= Trainer(model,logdirs,data_ora_formattata,num_classes,depth,100,128,
                              config_optim[optim]["lr"],config_optim[optim]["weight_decay"],
                              path,False,freeze_layers,None,optim,config_optim[optim]["momentum"],block_unfreeze)
             trainer.Fine_Tuning(cifar_train,cifar_test)
 
 print("finsh Fine Tuning")
-
 
 # %% [markdown]
 # ### Exercise 2.2: *Distill* the knowledge from a large model into a smaller one
