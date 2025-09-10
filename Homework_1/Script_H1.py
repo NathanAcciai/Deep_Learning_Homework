@@ -832,22 +832,22 @@ def Load_model(path,in_channels, out_channels, verbose=False):
 def Load_configuration():
     return {
         "adam": {
-            "lr": 1e-4,
+            "lr": 1e-1,
             "weight_decay": 1e-4,
             "momentum": None  # non serve per Adam
         },
         "adamw": {
-            "lr": 1e-4,
-            "weight_decay": 1e-3,
+            "lr": 1e-1,
+            "weight_decay": 1e-4,
             "momentum": None  # non serve per AdamW
         },
         "sgd": {
-            "lr": 1e-2,
-            "weight_decay": 1e-4,
+            "lr": 1e-1,
+            "weight_decay": 1e-3,
             "momentum": 0.9
         },
         "rmsprop": {
-            "lr": 1e-3,
+            "lr": 1e-1,
             "weight_decay": 1e-4,
             "momentum": 0.9
         }
@@ -863,12 +863,12 @@ name= f'run_{data_ora_formattata}'
 path_model_CNN= "CNN_Residual_vs_Base/Residual_depth2/Run_10_09_25T09_41"
 in_channels = 3
 out_channels= 64
-depth =10
+depth =2
 cifar_train, cifartest= Load_data_Cifar10()
 num_classes= 100
 
 model, hyperparametres= Load_model(path_model_CNN, in_channels, out_channels)
-block_unfreeze = [ "blocks.1", "fully_connected"]
+block_unfreeze = [ "fully_connected"]
 optimizer=["adam","adamw", "sgd", "rmsprop"]
 classificator=["svm", "knn", "gaussian"]
 
@@ -902,35 +902,3 @@ for freeze_layers in [True,False]:
             trainer.Fine_Tuning(cifar_train,cifar_test)
 
 print("finsh Fine Tuning")
-
-# %% [markdown]
-# ### Exercise 2.2: *Distill* the knowledge from a large model into a smaller one
-# In this exercise you will see if you can derive a *small* model that performs comparably to a larger one on CIFAR-10. To do this, you will use [Knowledge Distillation](https://arxiv.org/abs/1503.02531):
-# 
-# > Geoffrey Hinton, Oriol Vinyals, and Jeff Dean. Distilling the Knowledge in a Neural Network, NeurIPS 2015.
-# 
-# To do this:
-# 1. Train one of your best-performing CNNs on CIFAR-10 from Exercise 1.3 above. This will be your **teacher** model.
-# 2. Define a *smaller* variant with about half the number of parameters (change the width and/or depth of the network). Train it on CIFAR-10 and verify that it performs *worse* than your **teacher**. This small network will be your **student** model.
-# 3. Train the **student** using a combination of **hard labels** from the CIFAR-10 training set (cross entropy loss) and **soft labels** from predictions of the **teacher** (Kulback-Leibler loss between teacher and student).
-# 
-# Try to optimize training parameters in order to maximize the performance of the student. It should at least outperform the student trained only on hard labels in Setp 2.
-# 
-# **Tip**: You can save the predictions of the trained teacher network on the training set and adapt your dataloader to provide them together with hard labels. This will **greatly** speed up training compared to performing a forward pass through the teacher for each batch of training.
-
-# %%
-# Your code here.
-
-# %% [markdown]
-# ### Exercise 2.3: *Explain* the predictions of a CNN
-# 
-# Use the CNN model you trained in Exercise 1.3 and implement [*Class Activation Maps*](http://cnnlocalization.csail.mit.edu/#:~:text=A%20class%20activation%20map%20for,decision%20made%20by%20the%20CNN.):
-# 
-# > B. Zhou, A. Khosla, A. Lapedriza, A. Oliva, and A. Torralba. Learning Deep Features for Discriminative Localization. CVPR'16 (arXiv:1512.04150, 2015).
-# 
-# Use your CNN implementation to demonstrate how your trained CNN *attends* to specific image features to recognize *specific* classes. Try your implementation out using a pre-trained ResNet-18 model and some images from the [Imagenette](https://pytorch.org/vision/0.20/generated/torchvision.datasets.Imagenette.html#torchvision.datasets.Imagenette) dataset -- I suggest you start with the low resolution version of images at 160px.
-
-# %%
-# Your code here.
-
-
