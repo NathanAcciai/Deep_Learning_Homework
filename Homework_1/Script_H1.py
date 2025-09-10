@@ -541,7 +541,7 @@ class Trainer(nn.Module):
             os.makedirs(self.path_experiments)
         self.save_hyperparametres()
         self.model.to(self.device)
-        self.best_model= Training_Model(self.model,X, self.file_writer,self.device, self.optimizer,self.epochs,self.batch_size, self.learning_rate, self.weight_decay)
+        self.best_model= Training_Model(self.model,X, self.file_writer,self.device, self.optimizer,self.epochs,self.batch_size, self.learning_rate, self.weight_decay,self.study_grad)
         torch.save(self.best_model.state_dict(), os.path.join(self.path_experiments,'best_model.pt'))
 
     def Fine_Tuning(self,X_train,X_test):
@@ -609,34 +609,34 @@ class Trainer(nn.Module):
 # **For extra style points**: See if you can explain by analyzing the gradient magnitudes on a single training batch *why* this is the case. 
 
 # %%
-#now= datetime.datetime.now()
-#data_ora_formattata = now.strftime("%d_%m_%yT%H_%M")
-#name= f'run_{data_ora_formattata}'
-#
-#input_size = 28*28
-#width = 16
-#depths = [2,6,10]
-#minist_train, minist_test= Load_Data()
-#
-#for depth in depths:
-#    for use_skip in [True,False]:
-#        model= My_MLP(channels,use_skip=use_skip )
-#        channels= [input_size] + [width]*depth + [10]
-#        if use_skip:
-#            print(f'Run Training of Residual_depth{depth} ')
-#            logdir= f'tensorboard/Residual_vs_Simple_MLP/{name}/Residual_depth{depth}'
-#            path=f"Residual_vs_Simple_MLP/Residual_depth{depth}"
-#            
-#        else:
-#            print(f'Run Training of Simple_depth{depth} ')
-#            logdir= f'tensorboard/Residual_vs_Simple_MLP/{name}/Simple_depth{depth}'
-#            path=f"Residual_vs_Simple_MLP/Simple_depth{depth}"
-#            
-#        trainer= Trainer(model,logdir,data_ora_formattata,minist_train.classes,0,100,128,0.001,0.001,path,True)
-#
-#        trainer.Train(minist_train)
-#        trainer.Test(minist_test)
+now= datetime.datetime.now()
+data_ora_formattata = now.strftime("%d_%m_%yT%H_%M")
+name= f'run_{data_ora_formattata}'
 
+input_size = 28*28
+width = 16
+depths = [2,6,10]
+minist_train, minist_test= Load_Data()
+
+for depth in depths:
+    for use_skip in [True,False]:
+        
+        channels= [input_size] + [width]*depth + [10]
+        model= My_MLP(channels,use_skip=use_skip )
+        if use_skip:
+            print(f'Run Training of Residual_depth{depth} ')
+            logdir= f'tensorboard/Residual_vs_Simple_MLP/{name}/Residual_depth{depth}'
+            path=f"Residual_vs_Simple_MLP/Residual_depth{depth}"
+            
+        else:
+            print(f'Run Training of Simple_depth{depth} ')
+            logdir= f'tensorboard/Residual_vs_Simple_MLP/{name}/Simple_depth{depth}'
+            path=f"Residual_vs_Simple_MLP/Simple_depth{depth}"
+            
+        trainer= Trainer(model,logdir,data_ora_formattata,minist_train.classes,depth,100,128,0.001,0.001,path,True)
+
+        trainer.Train(minist_train)
+        trainer.Test(minist_test)
 
 # %% [markdown]
 # ### Exercise 1.3: Rinse and Repeat (but with a CNN)
@@ -832,23 +832,23 @@ def Load_model(path,in_channels, out_channels, verbose=False):
 def Load_configuration():
     return {
         "adam": {
-            "lr": 1e-1,
-            "weight_decay": 1e-4,
+            "lr": 1e-3,
+            "weight_decay": 1e-5,
             "momentum": None  # non serve per Adam
         },
         "adamw": {
-            "lr": 1e-1,
-            "weight_decay": 1e-4,
+            "lr": 1e-3,
+            "weight_decay": 1e-5,
             "momentum": None  # non serve per AdamW
         },
         "sgd": {
-            "lr": 1e-1,
+            "lr": 1e-2,
             "weight_decay": 1e-3,
             "momentum": 0.9
         },
         "rmsprop": {
-            "lr": 1e-1,
-            "weight_decay": 1e-4,
+            "lr": 1e-3,
+            "weight_decay": 1e-5,
             "momentum": 0.9
         }
     }
@@ -868,7 +868,7 @@ cifar_train, cifartest= Load_data_Cifar10()
 num_classes= 100
 
 model, hyperparametres= Load_model(path_model_CNN, in_channels, out_channels)
-block_unfreeze = [ "fully_connected"]
+block_unfreeze = ["fully_connected"]
 optimizer=["adam","adamw", "sgd", "rmsprop"]
 classificator=["svm", "knn", "gaussian"]
 
