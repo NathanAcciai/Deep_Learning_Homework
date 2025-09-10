@@ -1,0 +1,2 @@
+Epochs,Batch size,Learning Rate,Weight Decay,Num Classes,Freeze_layers,Depth
+100,128,0.001,0.001,10,False,6

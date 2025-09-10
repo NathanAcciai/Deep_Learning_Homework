@@ -815,14 +815,14 @@ def Load_data_Cifar100():
 def Load_model(path,in_channels, out_channels, verbose=False):
     hyperparam= pd.read_csv(path+"/hyperparametres.csv")
     model = CNN_Customize(
-        hyperparam["depth"][0],
+        hyperparam["Depth"][0],
         in_channels,
         out_channels,
         hyperparam["Num Classes"][0],
         True,
         True
     )
-    model.load_state_dict(torch.load(path+"/beast_model.pt", map_location="cpu"))
+    model.load_state_dict(torch.load(path+"/best_model.pt", map_location="cpu"))
     if verbose:
         print(model)
     return model, hyperparam
@@ -859,7 +859,8 @@ def Load_configuration():
 now= datetime.datetime.now()
 data_ora_formattata = now.strftime("%d_%m_%yT%H_%M")
 name= f'run_{data_ora_formattata}'
-path_model_CNN= "CNN_Residual_vs_Base/Residual_depth10/Run_07_09_25T19_06"
+
+path_model_CNN= "CNN_Residual_vs_Base/Residual_depth2/Run_10_09_25T09_41"
 in_channels = 3
 out_channels= 64
 depth =10
@@ -867,7 +868,7 @@ cifar_train, cifartest= Load_data_Cifar10()
 num_classes= 100
 
 model, hyperparametres= Load_model(path_model_CNN, in_channels, out_channels)
-block_unfreeze = [ "blocks.9", "fully_connected"]
+block_unfreeze = [ "blocks.1", "fully_connected"]
 optimizer=["adam","adamw", "sgd", "rmsprop"]
 classificator=["svm", "knn", "gaussian"]
 
