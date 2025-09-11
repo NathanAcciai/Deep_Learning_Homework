@@ -396,9 +396,9 @@ def custom_classifier(model,train_loader, test_loader, device, file_writer,type_
     features_test, labels_test=features_extractor(test_loader, model,device, file_writer)
 
     if type_of_classifier=="svm":
-        clf= LinearSVC(max_iter=2000)
+        clf= LinearSVC(max_iter=5000)
     elif type_of_classifier=="knn":
-        clf = KNeighborsClassifier(n_neighbors=5)
+        clf = KNeighborsClassifier(n_neighbors=10)
     else:
         clf= GaussianNB()
     clf.fit(features_train,labels_train)
@@ -609,34 +609,34 @@ class Trainer(nn.Module):
 # **For extra style points**: See if you can explain by analyzing the gradient magnitudes on a single training batch *why* this is the case. 
 
 # %%
-now= datetime.datetime.now()
-data_ora_formattata = now.strftime("%d_%m_%yT%H_%M")
-name= f'run_{data_ora_formattata}'
-
-input_size = 28*28
-width = 16
-depths = [2,6,10]
-minist_train, minist_test= Load_Data()
-
-for depth in depths:
-    for use_skip in [True,False]:
-        
-        channels= [input_size] + [width]*depth + [10]
-        model= My_MLP(channels,use_skip=use_skip )
-        if use_skip:
-            print(f'Run Training of Residual_depth{depth} ')
-            logdir= f'tensorboard/Residual_vs_Simple_MLP/{name}/Residual_depth{depth}'
-            path=f"Residual_vs_Simple_MLP/Residual_depth{depth}"
-            
-        else:
-            print(f'Run Training of Simple_depth{depth} ')
-            logdir= f'tensorboard/Residual_vs_Simple_MLP/{name}/Simple_depth{depth}'
-            path=f"Residual_vs_Simple_MLP/Simple_depth{depth}"
-            
-        trainer= Trainer(model,logdir,data_ora_formattata,minist_train.classes,depth,100,128,0.001,0.001,path,True)
-
-        trainer.Train(minist_train)
-        trainer.Test(minist_test)
+#now= datetime.datetime.now()
+#data_ora_formattata = now.strftime("%d_%m_%yT%H_%M")
+#name= f'run_{data_ora_formattata}'
+#
+#input_size = 28*28
+#width = 16
+#depths = [2,6,10]
+#minist_train, minist_test= Load_Data()
+#
+#for depth in depths:
+#    for use_skip in [True,False]:
+#        
+#        channels= [input_size] + [width]*depth + [10]
+#        model= My_MLP(channels,use_skip=use_skip )
+#        if use_skip:
+#            print(f'Run Training of Residual_depth{depth} ')
+#            logdir= f'tensorboard/Residual_vs_Simple_MLP/{name}/Residual_depth{depth}'
+#            path=f"Residual_vs_Simple_MLP/Residual_depth{depth}"
+#            
+#        else:
+#            print(f'Run Training of Simple_depth{depth} ')
+#            logdir= f'tensorboard/Residual_vs_Simple_MLP/{name}/Simple_depth{depth}'
+#            path=f"Residual_vs_Simple_MLP/Simple_depth{depth}"
+#            
+#        trainer= Trainer(model,logdir,data_ora_formattata,minist_train.classes,depth,100,128,0.001,0.001,path,True)
+#
+#        trainer.Train(minist_train)
+#        trainer.Test(minist_test)
 
 # %% [markdown]
 # ### Exercise 1.3: Rinse and Repeat (but with a CNN)
@@ -868,7 +868,7 @@ cifar_train, cifartest= Load_data_Cifar10()
 num_classes= 100
 
 model, hyperparametres= Load_model(path_model_CNN, in_channels, out_channels)
-block_unfreeze = ["fully_connected"]
+block_unfreeze = ["blocks.1","fully_connected"]
 optimizer=["adam","adamw", "sgd", "rmsprop"]
 classificator=["svm", "knn", "gaussian"]
 
