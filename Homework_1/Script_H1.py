@@ -396,9 +396,9 @@ def custom_classifier(model,train_loader, test_loader, device, file_writer,type_
     features_test, labels_test=features_extractor(test_loader, model,device, file_writer)
 
     if type_of_classifier=="svm":
-        clf= LinearSVC(max_iter=5000)
+        clf= LinearSVC(max_iter=8000)
     elif type_of_classifier=="knn":
-        clf = KNeighborsClassifier(n_neighbors=10)
+        clf = KNeighborsClassifier(n_neighbors=20)
     else:
         clf= GaussianNB()
     clf.fit(features_train,labels_train)
@@ -868,7 +868,7 @@ cifar_train, cifartest= Load_data_Cifar10()
 num_classes= 100
 
 model, hyperparametres= Load_model(path_model_CNN, in_channels, out_channels)
-block_unfreeze = ["blocks.1","fully_connected"]
+block_unfreeze = ["blocks.0","blocks.1","fully_connected"]
 optimizer=["adam","adamw", "sgd", "rmsprop"]
 classificator=["svm", "knn", "gaussian"]
 
