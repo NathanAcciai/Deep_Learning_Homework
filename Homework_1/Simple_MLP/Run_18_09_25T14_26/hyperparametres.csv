@@ -1,0 +1,4 @@
+Epochs,Batch size,Learning Rate,Weight Decay,Num Classes,Freeze_layers,Depth,Classificator
+100,128,0.001,0.001,100,False,2,svm
+100,128,0.001,0.001,100,False,2,knn
+100,128,0.001,0.001,100,False,2,gaussian

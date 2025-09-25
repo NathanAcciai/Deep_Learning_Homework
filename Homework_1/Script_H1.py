@@ -396,9 +396,9 @@ def custom_classifier(model,train_loader, test_loader, device, file_writer,type_
     features_test, labels_test=features_extractor(test_loader, model,device, file_writer)
 
     if type_of_classifier=="svm":
-        clf= LinearSVC(max_iter=8000)
+        clf= LinearSVC(max_iter=10000)
     elif type_of_classifier=="knn":
-        clf = KNeighborsClassifier(n_neighbors=20)
+        clf = KNeighborsClassifier(n_neighbors=25)
     else:
         clf= GaussianNB()
     clf.fit(features_train,labels_train)
@@ -422,15 +422,18 @@ def fine_tuning(model, device, num_classes, optim, learning_rate,weight_decay, m
     for name, param in model.named_parameters():
         if any(b in name for b in block_unfreeze):
             param.requires_grad= True 
+    for param in model.fully_connected.parameters():
+        param.requires_grad = True
     
+    optim_param= filter(lambda p: p.requires_grad, model.parameters())
     if optim=="adam":
-        optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
+        optimizer = torch.optim.Adam(optim_param, lr=learning_rate, weight_decay=weight_decay)
     elif optim=="adamw":
-        optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
+        optimizer = torch.optim.AdamW(optim_param, lr=learning_rate, weight_decay=weight_decay)
     elif optim=="sgd":
-        optimizer= torch.optim.SGD(model.parameters(),lr=learning_rate,momentum=momentum, weight_decay=weight_decay)
+        optimizer= torch.optim.SGD(optim_param,lr=learning_rate,momentum=momentum, weight_decay=weight_decay)
     else:
-        optimizer=torch.optim.RMSprop(model.parameters(),lr=learning_rate,momentum=momentum, weight_decay=weight_decay)
+        optimizer=torch.optim.RMSprop(optim_param,lr=learning_rate,momentum=momentum, weight_decay=weight_decay)
     
     return model, optimizer
                
