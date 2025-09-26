@@ -1,0 +1,5 @@
+Classic MLP (without skip connections):
+In the gradient plots, a typical phenomenon of deep networks can be observed: the gradient norms decrease rapidly in the deeper layers, close to the input. This is caused by the vanishing gradient problem, where the error signal backpropagating through the network becomes progressively attenuated. As a result, the early layers receive very small gradients, update their weights slowly, and contribute little to learning. This explains why a classic MLP takes longer to converge and may get stuck at relatively low performance.    
+
+MLP with skip connections:
+Adding bypass connections between layers allows gradients to skip certain layers and reach deeper layers more easily. In the gradnorm plots, it can be observed that the gradients remain more balanced across all layers, including the deeper ones. This enables the early layers to update more effectively, improving training stability and accelerating convergence. In fact, skip connections mitigate the vanishing gradient problem, making the learning of deep layers more efficient.
