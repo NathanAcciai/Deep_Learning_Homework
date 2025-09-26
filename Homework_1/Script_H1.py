@@ -863,7 +863,7 @@ now= datetime.datetime.now()
 data_ora_formattata = now.strftime("%d_%m_%yT%H_%M")
 name= f'run_{data_ora_formattata}'
 
-path_model_CNN= "CNN_Residual_vs_Base/Residual_depth2/Run_10_09_25T09_41"
+path_model_CNN= "CNN_Residual_vs_Base/Residual_depth6/Run_10_09_25T09_41"
 in_channels = 3
 out_channels= 64
 depth =2
