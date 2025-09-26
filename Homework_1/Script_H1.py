@@ -451,7 +451,7 @@ def Customize_model(model, X_train, X_test, file_writer,num_classes, device,
                     lr, weight_decay, batch_size,freeze_layers,cl,optim, momentum,
                     block_unfreeze):
     
-    train_loader = DataLoader(X_train, batch_size=batch_size, shuffle=False) 
+    train_loader = DataLoader(X_train, batch_size=batch_size, shuffle=True) 
     test_loader  = DataLoader(X_test, batch_size=batch_size, shuffle=False)
 
     if freeze_layers==False:
@@ -802,7 +802,7 @@ class CNN_Customize(nn.Module):
 def Load_data_Cifar100():
     transform = transforms.Compose([
         transforms.ToTensor(),
-        transforms.Normalize((0.5,), (0.5,))
+        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
     ])
     train_cifar100 = torchvision.datasets.CIFAR100(root='./data', train=True, download=True, transform=transform)
     test_cifar100 = torchvision.datasets.CIFAR100(root='./data', train=False, download=True, transform=transform)
@@ -835,22 +835,22 @@ def Load_model(path,in_channels, out_channels, verbose=False):
 def Load_configuration():
     return {
         "adam": {
-            "lr": 1e-3,
+            "lr": 1e-4,
             "weight_decay": 1e-5,
             "momentum": None  # non serve per Adam
         },
         "adamw": {
-            "lr": 1e-3,
+            "lr": 1e-4,
             "weight_decay": 1e-5,
             "momentum": None  # non serve per AdamW
         },
         "sgd": {
-            "lr": 1e-2,
-            "weight_decay": 1e-3,
+            "lr": 1e-4,
+            "weight_decay": 1e-4,
             "momentum": 0.9
         },
         "rmsprop": {
-            "lr": 1e-3,
+            "lr": 1e-4,
             "weight_decay": 1e-5,
             "momentum": 0.9
         }
@@ -866,13 +866,12 @@ name= f'run_{data_ora_formattata}'
 path_model_CNN= "CNN_Residual_vs_Base/Residual_depth6/Run_10_09_25T09_41"
 in_channels = 3
 out_channels= 64
-depth =2
-cifar_train, cifartest= Load_data_Cifar10()
+depth =6
 num_classes= 100
 
 model, hyperparametres= Load_model(path_model_CNN, in_channels, out_channels)
-block_unfreeze = ["blocks.0","blocks.1","fully_connected"]
-optimizer=["adam","adamw", "sgd", "rmsprop"]
+block_unfreeze = [ "blocks.2","blocks.3","blocks.4", "blocks.5", "fully_connected"]
+optimizer=["adamw", "sgd", "rmsprop","adam"]
 classificator=["svm", "knn", "gaussian"]
 
 cifar_train ,cifar_test= Load_data_Cifar100()
