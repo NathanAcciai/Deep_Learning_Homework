@@ -42,6 +42,7 @@ class ReinforceAgent(nn.Module):
                 enviroment,
                 logdir,
                 policy,
+                name_agent,
                 gamma=0.99,
                 max_lenght=500
                   
@@ -49,10 +50,17 @@ class ReinforceAgent(nn.Module):
         super(ReinforceAgent,self).__init__()
         self.env= enviroment
         self.gamma= gamma
-        self.file_writer= SummaryWriter(logdir)
+
+        logdir_agent= logdir+"/"+name_agent
+        if not os.path.exists(logdir_agent):
+            os.makedirs(logdir_agent, exist_ok=True)
+        self.file_writer= SummaryWriter(logdir_agent)
+
         self.policy= policy
         self.device= 'cuda' if torch.cuda.is_available() else 'cpu'
         self.max_lenght= max_lenght
+
+        
     """
     Decido come prendere l'azione, quindi la rete ritorna dei logits puri poi si va ad applicare la temperatiura
     in modo tale da decidere che atteggiamento deve avere la policy
@@ -105,7 +113,8 @@ class ReinforceAgent(nn.Module):
         actions = []
         log_probs = []
         rewards = []
-
+        termination_value={"failure": 0, "success":0}
+        
         (obs, _)= self.env.reset()
         for _ in range(self.max_lenght):
             obs= torch.tensor(obs, device=self.device)
@@ -116,9 +125,12 @@ class ReinforceAgent(nn.Module):
 
             (obs, reward, term, trunc, _ )= self.env.step(action)
             rewards.append(reward)
-            if term or trunc:
-                break
-        return torch.cat(log_probs), rewards
+            #Solo per cartpolevale la seguente termination values
+            if trunc:
+                termination_value["success"]+=1
+            elif term:
+                termination_value["failure"]+=1
+        return torch.cat(log_probs), rewards, termination_value
     
 """
 La classe sotto è una generalizazione di un trainer per qualsiasi agente con una qualsiasi policy, quindi non importa che policy o agente è stato implemnetato
@@ -136,6 +148,7 @@ class TrainAgentRenforce(nn.Module):
                 ):
         super(TrainAgentRenforce,self).__init__()
         self.reinforceagent= reinforcagent
+        self.file_witer= self.reinforceagent.file_writer
         self.num_episode= num_episode
         self.num_episode_validation= num_episode_validation
         self.check_val= check_val
@@ -182,29 +195,42 @@ class TrainAgentRenforce(nn.Module):
         self.best_eval_reward = data["best_eval_reward"]
         self.start_episode = data["episode"] + 1
 
+    """
+    Per la validazione si useranno più metriche per il modello così da avere più informazioni su come esso si comporta e non solo i reward applicati
+    media: ovviamente la prendiamo per capire i reward medi per ogni singolo episodio
+    deviazione standard: misura la stabiliutà dell'agente se è bassa ovviamente l'agente performa stabilmente ed è consistente
+    massimo-minimo reward: Indica la misura massima che l'agente ha ricevuto come ricomopensa per episodio 
+    percentile: il valore sotto il quale si trova il 10&% delle ricompense peggiori, utile per capire le performance dell'agente nei casi peggiori
+    """
 
     def evaluate(self):
         self.reinforceagent.policy.eval()
-        total_reward=0
+        total_reward=[]
         with torch.no_grad():
             for _ in range(self.num_episode_validation):
-                log_probs, rewards = self.reinforceagent.run_episode(1,False)
-                total_reward += rewards
+                log_probs, rewards,termination_value = self.reinforceagent.run_episode(1,False)
+                total_reward.append(sum(rewards))
 
-        avg_reward = total_reward / self.num_episode_validation 
-        return avg_reward
+            all_reward= np.array(total_reward)
+            mean_reward= all_reward.mean()
+            std= all_reward.std()
+            min_reward= all_reward.min()
+            max_reward= all_reward.max()
+            percentile_reward= np.percentile(all_reward, 10)
+        
+        return mean_reward
     #da rivedere questa cosa, le metriche in genberale
 
                 
-    def train_agent(self, temperature_train, temoerature_validation):
+    def train_agent(self, temperature_train):
 
         running_rewards= []
 
-        self.reinforceagent.policy.train()
-    
         for episode in range(self.num_episode):
 
-            log_probs, rewards= self.reinforceagent.run_episode(temperature_train)
+            self.reinforceagent.policy.train()
+
+            log_probs, rewards, termination_value= self.reinforceagent.run_episode(temperature_train)
 
             returns= torch.tensor(self.reinforceagent.compute_discount_returns(rewards,True), device= self.device)
         
@@ -216,11 +242,14 @@ class TrainAgentRenforce(nn.Module):
             running_rewards.append(sum(rewards))
 
             if episode % self.check_val==0:
-                pass #da aggiungere la validazione
+                avg_reward_val= self.evaluate()
+                
+                if avg_reward_val>= self.best_eval_reward:
+                    self.best_eval_reward= avg_reward_val
+                    self.save_checkpoint(episode,avg_reward_val,False)
+                else:
+                    self.save_checkpoint(episode,self.best_eval_reward,True)
 
-
-            
-        
         return running_rewards
 
 
