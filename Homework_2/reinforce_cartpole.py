@@ -203,23 +203,34 @@ class TrainAgentRenforce(nn.Module):
     percentile: il valore sotto il quale si trova il 10&% delle ricompense peggiori, utile per capire le performance dell'agente nei casi peggiori
     """
 
-    def evaluate(self):
+    def evaluate(self,episode):
         self.reinforceagent.policy.eval()
         total_reward=[]
+        episode_lenght=[]
         with torch.no_grad():
             for _ in range(self.num_episode_validation):
                 log_probs, rewards,termination_value = self.reinforceagent.run_episode(1,False)
                 total_reward.append(sum(rewards))
+                episode_lenght.append(len(rewards))
 
             all_reward= np.array(total_reward)
             mean_reward= all_reward.mean()
+            avg_lenght_episode= np.mean(episode_lenght)
             std= all_reward.std()
             min_reward= all_reward.min()
             max_reward= all_reward.max()
             percentile_reward= np.percentile(all_reward, 10)
-        
+
+            self.file_witer.add_scalar("Evaluation/Mean", mean_reward, episode)
+            self.file_witer.add_scalar("EValuation/Average Lenght Episode", avg_lenght_episode, episode)
+            self.file_witer.add_scalar("Evaluation/Standard Deviation", std, episode)
+            self.file_witer.add_scalar("Evaluation/Min Reward", min_reward, episode)
+            self.file_witer.add_scalar("Evaluation/Max Reward", max_reward,episode)
+            self.file_witer.add_scalar("Evaluation/Percentile 10%",percentile_reward, episode)
+            for type_term, count in termination_value.items():
+                self.file_witer.add_scalar(f'Evaluation/Termination {type_term}', count, episode)
         return mean_reward
-    #da rivedere questa cosa, le metriche in genberale
+    
 
                 
     def train_agent(self, temperature_train):
@@ -241,8 +252,13 @@ class TrainAgentRenforce(nn.Module):
             
             running_rewards.append(sum(rewards))
 
+            self.file_witer.add_scalar("Training/Loss", loss, episode)
+            self.file_witer.add_scalar("Training/Reward", sum(rewards), episode)
+            for term_type, count in termination_value.items():
+                self.writer.add_scalar(f"Eval/Termination_{term_type}", count, episode)
+
             if episode % self.check_val==0:
-                avg_reward_val= self.evaluate()
+                avg_reward_val= self.evaluate(episode)
                 
                 if avg_reward_val>= self.best_eval_reward:
                     self.best_eval_reward= avg_reward_val
