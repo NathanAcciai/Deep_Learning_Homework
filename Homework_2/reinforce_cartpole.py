@@ -233,7 +233,7 @@ class TrainAgentRenforce(nn.Module):
     
 
                 
-    def train_agent(self, temperature_train):
+    def train_agent(self, temperature_train, normalizzation_discount, baseline_discount):
 
         running_rewards= []
 
@@ -243,7 +243,7 @@ class TrainAgentRenforce(nn.Module):
 
             log_probs, rewards, termination_value= self.reinforceagent.run_episode(temperature_train)
 
-            returns= torch.tensor(self.reinforceagent.compute_discount_returns(rewards,True), device= self.device)
+            returns= torch.tensor(self.reinforceagent.compute_discount_returns(rewards,normalizzation_discount,baseline_discount), device= self.device)
         
             self.opt.zero_grad()
             loss = (-log_probs * returns).mean()
