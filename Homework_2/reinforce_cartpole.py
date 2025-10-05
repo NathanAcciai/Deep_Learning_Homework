@@ -151,10 +151,10 @@ class TrainAgentRenforce(nn.Module):
 
         if os.path.exists(self.checkpoint_path):
             self.load_checkpoint(self.checkpoint_path)
-            print(f"✅ Checkpoint founded {self.start_episode}")
+            print(f"Checkpoint founded {self.start_episode}")
         else:
             os.makedirs(self.checkpoint_path, exist_ok=True)
-            print("🚀 New Training")
+            print("New Training")
 
     """
     In questo si salva il checkpoint per poter ripartire nel caso di crash, oppure per salvare il miglior modello trovato secondo una specifica metrica.
