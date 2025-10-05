@@ -43,21 +43,19 @@ class ReinforceAgent(nn.Module):
                 logdir,
                 policy,
                 name_agent,
-                gamma=0.99,
+                gamma=0.95,
                 max_lenght=500
                   
                 ):
         super(ReinforceAgent,self).__init__()
         self.env= enviroment
         self.gamma= gamma
+        if not os.path.exists(logdir):
+            os.makedirs(logdir, exist_ok=True)
+        self.file_writer= SummaryWriter(logdir)
 
-        logdir_agent= logdir+"/"+name_agent
-        if not os.path.exists(logdir_agent):
-            os.makedirs(logdir_agent, exist_ok=True)
-        self.file_writer= SummaryWriter(logdir_agent)
-
-        self.policy= policy
         self.device= 'cuda' if torch.cuda.is_available() else 'cpu'
+        self.policy= policy.to(self.device)
         self.max_lenght= max_lenght
 
         
@@ -76,10 +74,11 @@ class ReinforceAgent(nn.Module):
             dist= Categorical(logits=logits_norm)
             action = dist.sample()
             log_prob= dist.log_prob(action)
+            log_prob= log_prob.reshape(1)
             action= action.item()
         else:
             action = torch.argmax(logits_norm).item()
-            log_prob = None
+            log_prob = torch.tensor([], device=self.device)
 
         return action, log_prob
     """
@@ -108,16 +107,16 @@ class ReinforceAgent(nn.Module):
     questo codice run il singolo episodio dove si calcola l'azione della policy e ovviamente si applica allo step dell'enviroment
     dato questo si deve capire anche se l'enviroment ha riportato un fallimento oppure se ha completato il suo obbiettivo
     """
-    def run_episode(self, temperature,train=True):
+    def run_episode(self, temperature,termination_value,train=True):
         observations = []
         actions = []
         log_probs = []
         rewards = []
-        termination_value={"failure": 0, "success":0}
+        
         
         (obs, _)= self.env.reset()
         for _ in range(self.max_lenght):
-            obs= torch.tensor(obs, device=self.device)
+            obs= torch.tensor(obs, dtype=torch.float32, device=self.device)
             (action, log_prob)= self.select_action(obs,temperature, train)
             observations.append(obs)
             actions.append(action)
@@ -128,8 +127,10 @@ class ReinforceAgent(nn.Module):
             #Solo per cartpolevale la seguente termination values
             if trunc:
                 termination_value["success"]+=1
+                break
             elif term:
                 termination_value["failure"]+=1
+                break
         return torch.cat(log_probs), rewards, termination_value
     
 """
@@ -156,10 +157,11 @@ class TrainAgentRenforce(nn.Module):
         self.device= 'cuda' if torch.cuda.is_available() else 'cpu'
         self.checkpoint_path= checkpoint_path
         self.best_model_path= best_model_path
-        self.opt= optim.Adam(self.reinforceagent.policy.parametres(), lr=self.lr)
+        self.opt= optim.Adam(self.reinforceagent.policy.parameters(), lr=self.lr)
         self.best_eval_reward = -float("inf")
         self.start_episode = 1
-
+        self.termination_value_train={"failure": 0, "success":0}
+        self.termination_value_test={"failure": 0, "success":0}
         os.makedirs(self.best_model_path, exist_ok=True)
 
         if os.path.exists(self.checkpoint_path):
@@ -167,7 +169,7 @@ class TrainAgentRenforce(nn.Module):
             print(f"Checkpoint founded {self.start_episode}")
         else:
             os.makedirs(self.checkpoint_path, exist_ok=True)
-            print("New Training")
+            print("Checkpoint not founded, start a new Training")
 
     """
     In questo si salva il checkpoint per poter ripartire nel caso di crash, oppure per salvare il miglior modello trovato secondo una specifica metrica.
@@ -180,7 +182,11 @@ class TrainAgentRenforce(nn.Module):
             'optimizer_state_dict': self.opt.state_dict(),
             'best_eval_reward': best_eval,
         }
-        path_save= self.checkpoint_path if checkpoint else self.best_model_path
+        
+        if checkpoint:
+            path_save=os.path.join(self.checkpoint_path,'checkpoint.pt')
+        else:
+            path_save=os.path.join(self.best_model_path,'best_model.pt')
         torch.save(data, path_save)
 
 
@@ -209,7 +215,7 @@ class TrainAgentRenforce(nn.Module):
         episode_lenght=[]
         with torch.no_grad():
             for _ in range(self.num_episode_validation):
-                log_probs, rewards,termination_value = self.reinforceagent.run_episode(1,False)
+                log_probs, rewards,self.termination_value_test = self.reinforceagent.run_episode(1,self.termination_value_test,False)
                 total_reward.append(sum(rewards))
                 episode_lenght.append(len(rewards))
 
@@ -227,7 +233,7 @@ class TrainAgentRenforce(nn.Module):
             self.file_witer.add_scalar("Evaluation/Min Reward", min_reward, episode)
             self.file_witer.add_scalar("Evaluation/Max Reward", max_reward,episode)
             self.file_witer.add_scalar("Evaluation/Percentile 10%",percentile_reward, episode)
-            for type_term, count in termination_value.items():
+            for type_term, count in self.termination_value_test.items():
                 self.file_witer.add_scalar(f'Evaluation/Termination {type_term}', count, episode)
         return mean_reward
     
@@ -241,7 +247,7 @@ class TrainAgentRenforce(nn.Module):
 
             self.reinforceagent.policy.train()
 
-            log_probs, rewards, termination_value= self.reinforceagent.run_episode(temperature_train)
+            log_probs, rewards, self.termination_value_train= self.reinforceagent.run_episode(temperature_train,self.termination_value_train)
 
             returns= torch.tensor(self.reinforceagent.compute_discount_returns(rewards,normalizzation_discount,baseline_discount), device= self.device)
         
@@ -251,11 +257,10 @@ class TrainAgentRenforce(nn.Module):
             self.opt.step()
             
             running_rewards.append(sum(rewards))
-
-            self.file_witer.add_scalar("Training/Loss", loss, episode)
+            self.file_witer.add_scalar("Training/Loss", loss.item(), episode)
             self.file_witer.add_scalar("Training/Reward", sum(rewards), episode)
-            for term_type, count in termination_value.items():
-                self.writer.add_scalar(f"Eval/Termination_{term_type}", count, episode)
+            for term_type, count in self.termination_value_train.items():
+                self.file_witer.add_scalar(f"Evaluation/Termination_{term_type}", count, episode)
 
             if episode % self.check_val==0:
                 avg_reward_val= self.evaluate(episode)
@@ -265,6 +270,9 @@ class TrainAgentRenforce(nn.Module):
                     self.save_checkpoint(episode,avg_reward_val,False)
                 else:
                     self.save_checkpoint(episode,self.best_eval_reward,True)
+
+                print(f'Running reward train from episode {episode}: {running_rewards[-1]}')
+                print(f'Average reward test from episode {episode}: {avg_reward_val}\n')
 
         return running_rewards
 
