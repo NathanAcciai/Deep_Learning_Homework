@@ -58,7 +58,7 @@ class ReinforceAgent(nn.Module):
             os.makedirs(logdir, exist_ok=True)
         self.file_writer= SummaryWriter(logdir)
 
-        self.device= 'mps' if torch.mps.is_available() else 'cpu'
+        self.device= 'cuda' if torch.cuda.is_available() else 'cpu'
         self.policy= policy.to(self.device)
         self.max_lenght= max_lenght
 
@@ -161,7 +161,7 @@ class TrainAgentRenforce(nn.Module):
         self.check_val= check_val
         self.lr= lr
         self.temperature_train=temperature_train
-        self.device= 'mps' if torch.mps.is_available() else 'cpu'
+        self.device= 'cuda' if torch.cuda.is_available() else 'cpu'
         self.checkpoint_path= checkpoint_path
         self.best_model_path= best_model_path
         self.hyperparams_path=hyperparams_path
