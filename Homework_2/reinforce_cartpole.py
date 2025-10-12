@@ -229,7 +229,7 @@ class TrainAgentRenforce(nn.Module):
     percentile: il valore sotto il quale si trova il 10&% delle ricompense peggiori, utile per capire le performance dell'agente nei casi peggiori
     """
 
-    def evaluate(self,episode,q):
+    def evaluate(self,episode,q=None):
         self.reinforceagent.policy.eval()
         total_reward=[]
         episode_lenght=[]
@@ -238,10 +238,10 @@ class TrainAgentRenforce(nn.Module):
                 log_probs, rewards,self.termination_value_test = self.reinforceagent.run_episode(1,self.termination_value_test,False)
                 total_reward.append(sum(rewards))
                 episode_lenght.append(len(rewards))
-                q.put({
-                    "episode_val": episode_val,
-                    "reward_val": sum(rewards),
-                })
+                #q.put({
+                #    "episode_val": episode_val,
+                #    "reward_val": sum(rewards),
+                #})
 
             all_reward= np.array(total_reward)
             mean_reward= all_reward.mean()
@@ -265,9 +265,9 @@ class TrainAgentRenforce(nn.Module):
                 
     def train_agent(self, normalizzation_discount, baseline_discount):
         
-        q = Queue()
-        p = Process(target=run_stats_window, args=(q,))
-        p.start()
+        #q = Queue()
+        #p = Process(target=run_stats_window, args=(q,))
+        #p.start()
 
 
         running_rewards= []
@@ -291,17 +291,17 @@ class TrainAgentRenforce(nn.Module):
             for term_type, count in self.termination_value_train.items():
                 self.file_witer.add_scalar(f"Training/Termination_{term_type}", count, episode)
 
-            q.put({
-                "episode": episode,
-                "reward": sum(rewards),
-                "best": self.best_eval_reward,
-                "success": self.termination_value_train["success"],
-                "failure": self.termination_value_train["failure"],
-                
-            })
-                    
+            #q.put({
+            #    "episode": episode,
+            #    "reward": sum(rewards),
+            #    "best": self.best_eval_reward,
+            #    "success": self.termination_value_train["success"],
+            #    "failure": self.termination_value_train["failure"],
+            #    
+            #})
+            #        
             if episode % self.check_val==0:
-                avg_reward_val= self.evaluate(episode,q)
+                avg_reward_val= self.evaluate(episode)#,q)
                 
                 if avg_reward_val>= self.best_eval_reward:
                     self.best_eval_reward= avg_reward_val
@@ -313,7 +313,7 @@ class TrainAgentRenforce(nn.Module):
                 print(f'Average reward test from episode {episode}: {avg_reward_val}\n')
         
         
-        p.terminate()
-        p.join()
+        #p.terminate()
+        #p.join()
         return running_rewards
 
