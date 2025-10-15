@@ -29,6 +29,19 @@ class PolicyNetwork(nn.Module):
         x= F.relu(self.fc1(x))
         logits= self.fc2(x)
         return F.softmax(logits, dim=-1)
+
+#Implemento la nuova rete per la valutazione
+class ValueNetwork(nn.Module):
+    def __init__(self, obs_dim, output_dim=1, hidden_size=128):
+        super(ValueNetwork, self).__init__()
+        self.fc1=nn.Linear(obs_dim, hidden_size)
+        self.fc2= nn.Linear(hidden_size, output_dim)
+
+    def forward(self,state):
+        state= F.relu(self.fc1(state))
+        state= self.fc2(state)
+        return state
+
     
 """
 Definiamo adesso invece la scelta dell'azione tramite una distribuzione categorica essendo ovviamente che si parla
@@ -46,10 +59,9 @@ class ReinforceAgent(nn.Module):
                 enviroment,
                 logdir,
                 policy,
-                name_agent,
                 gamma=0.95,
-                max_lenght=500
-                  
+                max_lenght=500,
+                value_net=False
                 ):
         super(ReinforceAgent,self).__init__()
         self.env= enviroment
@@ -57,10 +69,13 @@ class ReinforceAgent(nn.Module):
         if not os.path.exists(logdir):
             os.makedirs(logdir, exist_ok=True)
         self.file_writer= SummaryWriter(logdir)
-
         self.device= 'cuda' if torch.cuda.is_available() else 'cpu'
         self.policy= policy.to(self.device)
         self.max_lenght= max_lenght
+        input_dim= enviroment.observation_space.shape[0]
+        self.value_net= value_net
+        if value_net:
+            self.value_net= ValueNetwork(input_dim).to(self.device)
 
         
     """
@@ -135,7 +150,7 @@ class ReinforceAgent(nn.Module):
             elif term:
                 termination_value["failure"]+=1
                 break
-        return torch.cat(log_probs), rewards, termination_value
+        return torch.cat(log_probs), rewards, termination_value,torch.stack(observations)
     
 """
 La classe sotto è una generalizazione di un trainer per qualsiasi agente con una qualsiasi policy, quindi non importa che policy o agente è stato implemnetato
@@ -151,7 +166,8 @@ class TrainAgentRenforce(nn.Module):
                  temperature_train=1,
                  checkpoint_path="checkpoint.pt",
                  best_model_path="best_model.pt",
-                 hyperparams_path="hyperparamtres.csv"
+                 hyperparams_path="hyperparamtres.csv",
+                 lr_value_net= 1e-3
                 ):
         super(TrainAgentRenforce,self).__init__()
         self.reinforceagent= reinforcagent
@@ -160,12 +176,16 @@ class TrainAgentRenforce(nn.Module):
         self.num_episode_validation= num_episode_validation
         self.check_val= check_val
         self.lr= lr
+        self.lr_value_net= lr_value_net
         self.temperature_train=temperature_train
         self.device= 'cuda' if torch.cuda.is_available() else 'cpu'
         self.checkpoint_path= checkpoint_path
         self.best_model_path= best_model_path
         self.hyperparams_path=hyperparams_path
         self.opt= optim.Adam(self.reinforceagent.policy.parameters(), lr=self.lr)
+        self.value_net=self.reinforceagent.value_net
+        if self.value_net:
+            self.optim_value_net= optim.Adam(self.reinforceagent.value_net.parameters(), lr= self.lr_value_net)
         self.best_eval_reward = -float("inf")
         self.start_episode = 1
         self.termination_value_train={"failure": 0, "success":0}
@@ -189,6 +209,8 @@ class TrainAgentRenforce(nn.Module):
             'temperature': self.temperature_train,
             'gamma': self.reinforceagent.gamma
         }
+        if self.value_net:
+            dict_hp["learning_rate_value_net"]=self.lr_value_net
         df = pd.DataFrame(dict_hp,index=[0])
         df.to_csv(os.path.join(self.hyperparams_path,"hyperparametres.csv"), index=False)
     """
@@ -202,6 +224,9 @@ class TrainAgentRenforce(nn.Module):
             'optimizer_state_dict': self.opt.state_dict(),
             'best_eval_reward': best_eval,
         }
+        if self.value_net:
+            data["value_net_state_dict"]= self.reinforceagent.value_net.state_dict()
+            data["optimizer_vn_state_dict"]= self.optim_value_net.state_dict()
         
         if checkpoint:
             path_save=os.path.join(self.checkpoint_path,'checkpoint.pt')
@@ -220,6 +245,9 @@ class TrainAgentRenforce(nn.Module):
         self.opt.load_state_dict(data["optimizer_state_dict"])
         self.best_eval_reward = data["best_eval_reward"]
         self.start_episode = data["episode"] + 1
+        if self.value_net:
+            self.reinforceagent.value_net.load_state_dict(data["value_net_state_dict"])
+            self.optim_value_net.load_state_dict(data["optimizer_vn_state_dict"])
 
     """
     Per la validazione si useranno più metriche per il modello così da avere più informazioni su come esso si comporta e non solo i reward applicati
@@ -231,17 +259,31 @@ class TrainAgentRenforce(nn.Module):
 
     def evaluate(self,episode,q=None):
         self.reinforceagent.policy.eval()
+        if self.value_net:
+            self.reinforceagent.value_net.eval()
         total_reward=[]
         episode_lenght=[]
+        value_losses = []
+        value_mae = []
         with torch.no_grad():
             for episode_val in range(self.num_episode_validation):
-                log_probs, rewards,self.termination_value_test = self.reinforceagent.run_episode(1,self.termination_value_test,False)
+                log_probs, rewards,self.termination_value_test,obs = self.reinforceagent.run_episode(1,self.termination_value_test,False)
                 total_reward.append(sum(rewards))
                 episode_lenght.append(len(rewards))
                 #q.put({
                 #    "episode_val": episode_val,
                 #    "reward_val": sum(rewards),
                 #})
+                if self.value_net:
+                    returns = self.reinforceagent.compute_discount_returns(rewards)
+                    returns = returns.to(self.device)
+
+                    # Calcola stima della value net
+                    values = self.reinforceagent.value_net(obs).squeeze()
+                    value_losses.append((returns - values).pow(2).mean().item())
+                    value_mae.append((returns - values).abs().mean().item())
+                
+
 
             all_reward= np.array(total_reward)
             mean_reward= all_reward.mean()
@@ -259,11 +301,14 @@ class TrainAgentRenforce(nn.Module):
             self.file_witer.add_scalar("Evaluation/Percentile 10%",percentile_reward, episode)
             for type_term, count in self.termination_value_test.items():
                 self.file_witer.add_scalar(f'Evaluation/Termination {type_term}', count, episode)
+            if self.value_net:
+                self.file_witer.add_scalar("ValueNet/Evaluation/MSE value net", np.mean(value_losses), episode)
+                self.file_witer.add_scalar("ValueNet/Evaluation/MAE value net", np.mean(value_mae), episode)
         return mean_reward
     
 
                 
-    def train_agent(self, normalizzation_discount, baseline_discount_sub):
+    def train_agent(self, normalizzation_discount=False, baseline_discount_sub=False):
         
         #q = Queue()
         #p = Process(target=run_stats_window, args=(q,))
@@ -276,14 +321,30 @@ class TrainAgentRenforce(nn.Module):
 
             self.reinforceagent.policy.train()
 
-            log_probs, rewards, self.termination_value_train= self.reinforceagent.run_episode(self.temperature_train,self.termination_value_train)
+            log_probs, rewards, self.termination_value_train, observation= self.reinforceagent.run_episode(self.temperature_train,self.termination_value_train)
 
             returns= torch.tensor(self.reinforceagent.compute_discount_returns(rewards,normalizzation_discount,baseline_discount_sub), device= self.device)
-        
+            if self.value_net:
+                values_baseline= self.reinforceagent.value_net(observation).squeeze()
+                advantages = returns - values_baseline.detach() 
+            else:
+                advantages= returns
+            #aggiorno la policy
             self.opt.zero_grad()
-            loss = (-log_probs * returns).mean()
+            loss = (-log_probs * advantages).mean()
             loss.backward()
             self.opt.step()
+            #aggiorno la rete di baseline
+            if self.value_net:
+                self.optim_value_net.zero_grad()
+                #scarto medio quadratico ovvero si capisce quanto la rete sbaglia a prevedere la funzione di ritorno con un solo valore medio
+                value_loss = (returns - values_baseline).pow(2).mean()
+                value_loss.backward()
+                self.optim_value_net.step()
+                mae=(returns - values_baseline.detach()).abs().mean().item()
+                self.file_witer.add_scalar("ValueNet/Training/Loss value baseline net", value_loss.item(), episode)
+                self.file_witer.add_scalar("ValueNet/Training/MAE value net", mae, episode)
+
             
             running_rewards.append(sum(rewards))
             self.file_witer.add_scalar("Training/Loss", loss.item(), episode)
