@@ -9,9 +9,9 @@ import torch.nn.functional as F
 import matplotlib.pyplot as plt
 from torch.utils.tensorboard import SummaryWriter
 import os
-import pygame
+#import pygame
 from multiprocessing import Process, Queue
-from stats_windows import run_stats_window
+#from stats_windows import run_stats_window
 
 
 """
@@ -25,9 +25,9 @@ class PolicyNetwork(nn.Module):
         self.fc1= nn.Linear(obs_dim, hidden_size)
         self.fc2= nn.Linear(hidden_size, action_dim)
     
-    def forward(self, x,tempreature=1.0):
+    def forward(self, x):
         x= F.relu(self.fc1(x))
-        logits= self.fc2(x)/ tempreature
+        logits= self.fc2(x)
         return F.softmax(logits, dim=-1)
     
 """
@@ -263,7 +263,7 @@ class TrainAgentRenforce(nn.Module):
     
 
                 
-    def train_agent(self, normalizzation_discount, baseline_discount):
+    def train_agent(self, normalizzation_discount, baseline_discount_sub):
         
         #q = Queue()
         #p = Process(target=run_stats_window, args=(q,))
@@ -278,7 +278,7 @@ class TrainAgentRenforce(nn.Module):
 
             log_probs, rewards, self.termination_value_train= self.reinforceagent.run_episode(self.temperature_train,self.termination_value_train)
 
-            returns= torch.tensor(self.reinforceagent.compute_discount_returns(rewards,normalizzation_discount,baseline_discount), device= self.device)
+            returns= torch.tensor(self.reinforceagent.compute_discount_returns(rewards,normalizzation_discount,baseline_discount_sub), device= self.device)
         
             self.opt.zero_grad()
             loss = (-log_probs * returns).mean()
