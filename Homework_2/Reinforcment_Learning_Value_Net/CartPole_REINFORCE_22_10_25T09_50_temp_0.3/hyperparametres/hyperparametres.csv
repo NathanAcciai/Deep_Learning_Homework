@@ -1,0 +1,2 @@
+learning_rate,temperature,gamma,learning_rate_value_net
+0.01,0.3,0.99,0.0001

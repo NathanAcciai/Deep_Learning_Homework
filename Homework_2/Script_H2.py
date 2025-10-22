@@ -158,6 +158,85 @@ env = gym.make('CartPole-v1')
 # This baseline is **already** implemented in my implementation of `REINFORCE`. Experiment with and without this standardization baseline and compare the performance. We are going to do something more interesting.
 
 # %%
+#import numpy as np
+#import gymnasium as gym
+#import torch 
+#import torch.nn as nn
+#import torch.optim as optim
+#from torch.distributions import Categorical
+#import torch.nn.functional as F
+#import matplotlib.pyplot as plt
+#from torch.utils.tensorboard import SummaryWriter
+#import os
+#import datetime
+#from reinforce_cartpole import PolicyNetwork, ReinforceAgent, TrainAgentRenforce
+##import pygame
+##_ = pygame.init()
+#
+#now= datetime.datetime.now()
+#data_ora_formattata = now.strftime("%d_%m_%yT%H_%M")
+#name= f'run_{data_ora_formattata}'
+#
+##env = gym.make("CartPole-v1", render_mode="human")
+#env = gym.make("CartPole-v1")
+##pygame.display.init() 
+#name_agent="CartPole_REINFORCE"
+#normalizzation_discount=False
+#baseline_discount=False
+#temperature_train=[0.3, 0.5, 0.7, 1 , 1.5, 2]
+#for temp in temperature_train:
+#    for subtract in [True,False]:
+#        baseline= "simple_subtract" if subtract else "normalization"
+#
+#
+#        general_path= f'Reinforcment_Learning_Classic_Baseline_sub_std/{name_agent}_{data_ora_formattata}_temp_{temp}_Baseline_{baseline}'
+#
+#        checkpoint_path=general_path+"/checkpoint"
+#        bestmodel_path= general_path+"/best_model"
+#        hyperparamtres_path= general_path+"/hyperparametres"
+#
+#        obs_dim = env.observation_space.shape[0]
+#        action_dim = env.action_space.n
+#
+#        policy = PolicyNetwork(obs_dim=obs_dim, action_dim=action_dim)
+#
+#        logdir= f'tensorboard/Reinforcment_Learning_Baseline_sub_std/{name_agent}/{name}_temp_{temp}_BaseLine_{baseline}'
+#
+#        agent = ReinforceAgent(
+#            enviroment=env,
+#            logdir=logdir, #da modificare
+#            policy=policy,
+#            name_agent=name_agent,
+#            gamma=0.99,
+#            max_lenght=500
+#        )
+#
+#        trainer = TrainAgentRenforce(
+#            reinforcagent=agent,
+#            lr=1e-2,
+#            num_episode=500,
+#            num_episode_validation=10,
+#            check_val=10,
+#            checkpoint_path=checkpoint_path,
+#            best_model_path=bestmodel_path,
+#            hyperparams_path=hyperparamtres_path,
+#            temperature_train=temp
+#        )
+#        if subtract:
+#            running_rewards = trainer.train_agent(normalizzation_discount=False,baseline_discount_sub=True)
+#        else:
+#            running_rewards=trainer.train_agent(normalizzation_discount=True,baseline_discount_sub=False)
+#
+# %% [markdown]
+# **The Real Exercise**: Standard practice is to use the state-value function $v(s)$ as a baseline. This is intuitively appealing -- we are more interested in updating out policy for returns that estimate the current **value** worse. Our new update becomes:
+# 
+# $$ \boldsymbol{\theta}_{t+1} \triangleq \boldsymbol{\theta}_t + \alpha (G_t - \tilde{v}(S_t \mid \mathbf{w})) \frac{\nabla \pi(A_t \mid s, \boldsymbol{\theta})}{\pi(A_t \mid s, \boldsymbol{\theta})} $$
+# 
+# where $\tilde{v}(s \mid \mathbf{w})$ is a **deep neural network** with parameters $w$ that estimates $v_\pi(s)$. What neural network? Typically, we use the **same** network architecture as that of the Policy.
+# 
+# **Your Task**: Modify your implementation to fit a second, baseline network to estimate the value function and use it as **baseline**. 
+
+
 import numpy as np
 import gymnasium as gym
 import torch 
@@ -173,9 +252,7 @@ from reinforce_cartpole import PolicyNetwork, ReinforceAgent, TrainAgentRenforce
 #import pygame
 #_ = pygame.init()
 
-now= datetime.datetime.now()
-data_ora_formattata = now.strftime("%d_%m_%yT%H_%M")
-name= f'run_{data_ora_formattata}'
+
 
 #env = gym.make("CartPole-v1", render_mode="human")
 env = gym.make("CartPole-v1")
@@ -184,12 +261,13 @@ name_agent="CartPole_REINFORCE"
 normalizzation_discount=False
 baseline_discount=False
 temperature_train=[0.3, 0.5, 0.7, 1 , 1.5, 2]
+lr_value_net= [1e-2,1e-3,1e-4]
 for temp in temperature_train:
-    for subtract in [True,False]:
-        baseline= "simple_subtract" if subtract else "normalization"
-
-
-        general_path= f'Reinforcment_Learning_Classic_Baseline_sub_std/{name_agent}_{data_ora_formattata}_temp_{temp}_Baseline_{baseline}'
+    for lr_vnet in lr_value_net:
+        now= datetime.datetime.now()
+        data_ora_formattata = now.strftime("%d_%m_%yT%H_%M")
+        name= f'run_{data_ora_formattata}'
+        general_path= f'Reinforcment_Learning_Value_Net/{name_agent}_{data_ora_formattata}_temp_{temp}'
 
         checkpoint_path=general_path+"/checkpoint"
         bestmodel_path= general_path+"/best_model"
@@ -200,15 +278,15 @@ for temp in temperature_train:
 
         policy = PolicyNetwork(obs_dim=obs_dim, action_dim=action_dim)
 
-        logdir= f'tensorboard/Reinforcment_Learning_Baseline_sub_std/{name_agent}/{name}_temp_{temp}_BaseLine_{baseline}'
+        logdir= f'tensorboard/Reinforcment_Learning_Value_Net/{name_agent}/{name}_temp_{temp}'
 
         agent = ReinforceAgent(
             enviroment=env,
-            logdir=logdir, #da modificare
+            logdir=logdir, 
             policy=policy,
-            name_agent=name_agent,
             gamma=0.99,
-            max_lenght=500
+            max_lenght=500,
+            value_net=True
         )
 
         trainer = TrainAgentRenforce(
@@ -220,24 +298,10 @@ for temp in temperature_train:
             checkpoint_path=checkpoint_path,
             best_model_path=bestmodel_path,
             hyperparams_path=hyperparamtres_path,
-            temperature_train=temp
+            temperature_train=temp,
+            lr_value_net=lr_vnet
         )
-        if subtract:
-            running_rewards = trainer.train_agent(normalizzation_discount=False,baseline_discount_sub=True)
-        else:
-            running_rewards=trainer.train_agent(normalizzation_discount=True,baseline_discount_sub=False)
-
-# %% [markdown]
-# **The Real Exercise**: Standard practice is to use the state-value function $v(s)$ as a baseline. This is intuitively appealing -- we are more interested in updating out policy for returns that estimate the current **value** worse. Our new update becomes:
-# 
-# $$ \boldsymbol{\theta}_{t+1} \triangleq \boldsymbol{\theta}_t + \alpha (G_t - \tilde{v}(S_t \mid \mathbf{w})) \frac{\nabla \pi(A_t \mid s, \boldsymbol{\theta})}{\pi(A_t \mid s, \boldsymbol{\theta})} $$
-# 
-# where $\tilde{v}(s \mid \mathbf{w})$ is a **deep neural network** with parameters $w$ that estimates $v_\pi(s)$. What neural network? Typically, we use the **same** network architecture as that of the Policy.
-# 
-# **Your Task**: Modify your implementation to fit a second, baseline network to estimate the value function and use it as **baseline**. 
-
-# %%
-# Your code here.
+        running_rewards = trainer.train_agent()
 
 # %% [markdown]
 # -----
