@@ -186,7 +186,7 @@ class DQNAgent:
             next_q_max= next_q.max(dim=1)[0]
             #ora calolco la ricompensa target y
             # r_t + gamma (1-d_t) * max Q(s_t+1,a')
-            target= reward + self.gamma* (1-done)*next_q
+            target= reward + self.gamma* (1-done)*next_q_max
         #ora che ho la ricompensa target posso calcolare MSE per la loss rispetto a quella della rete
         loss= nn.functional.mse_loss(q_values, target)
         self.optimizer.zero_grad()
@@ -198,6 +198,41 @@ class DQNAgent:
         if self.total_step % self.target_update_freq==0:
             self.q_target.load_state_dict(self.q_network.state_dict())
 
+def train(env, agent: DQNAgent, num_episode= 500):
+    #collezziono i ritorni per ogni episodio
+    episode_rewards=[]
+    for episode in range(num_episode):
+        obs= env.reset()[0]
+        episode_reward=0
+        done=False
+
+        while not done:
+            #l'agente prende un azione con epsilon greedy inizialmente
+            action= agent.take_action(obs)
+            #vado dunque a eseguire l'azione nell' ambiente 
+            next_obs, reward,terminated, truncated,_= env.step(action)
+            #verifico se l'episodio è finito perchè fallito oppure terminato
+            done = terminated or truncated
+            #aggiungo esperienza al replay buffer
+            agent.replay_buffer.add(
+                obs,action, reward, next_obs, done
+            )
+            #step di training dell'agente sulla base di quello che è successo 
+            agent.training_step()
+            obs= next_obs
+            #sommo le reward che ho ottenuto
+            episode_reward+=reward
+        
+        episode_rewards.append(episode_reward)
+        print(f'Episode {episode}, reward: {episode_reward:.2f}, Epsilon: {agent.epsilon:.3f}')
+    
+    return episode_rewards
+
+def evaluation(env, agent, num_episode):
+    
+    episode_rewards=[]
+    for episode in range(num_episode):
+        
 
 
     
