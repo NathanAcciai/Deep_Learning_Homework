@@ -9,6 +9,7 @@ import torch.nn.functional as F
 import matplotlib.pyplot as plt
 from torch.utils.tensorboard import SummaryWriter
 import os
+import copy
 
 '''
 Il Replay buffer serve nel Q-Learning per memorizzare le esperienze passate e campionandole per stabilizzare l'addestramento.
@@ -228,11 +229,37 @@ def train(env, agent: DQNAgent, num_episode= 500):
     
     return episode_rewards
 
-def evaluation(env, agent, num_episode):
+def evaluation(env, agent: DQNAgent, num_episode_val):
+    #serve per ripristinare la epsilon che ho in train 
+    old_epsilon=copy.deepcopy(agent.epsilon)
+    #imposto quindi la scelta deterministica dell' azione (greedy)
+    agent.epsilon=0
     
     episode_rewards=[]
-    for episode in range(num_episode):
-        
+    for episode in range(num_episode_val):
+        obs= env.reset()[0]
+        done =False
+        episode_reward=0
+
+        while not done:
+            obs_tensor= torch.tensor(obs, device= agent.device).unsqueeze(0)
+            q_values= agent.q_network(obs_tensor)
+            action= int(torch.argmax(q_values, dim=1).item())
+
+            next_obs,reward,terminate,truncated, _= env.step(action)
+            done = terminate or truncated
+
+            obs = next_obs
+            episode_reward+=reward
+        episode_rewards.append(episode_reward)
+    #ripristino la epsilon greedy 
+    agent.epsilon= old_epsilon
+    avg_reward= sum(episode_rewards)/ num_episode_val
+    print(f'Avergae reward of evaluation of agent network {avg_reward}')
+    return avg_reward
+
+
+
 
 
     
