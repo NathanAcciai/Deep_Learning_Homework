@@ -229,9 +229,9 @@ class TrainAgentRenforce(nn.Module):
             data["optimizer_vn_state_dict"]= self.optim_value_net.state_dict()
         
         if checkpoint:
-            path_save=os.path.join(self.checkpoint_path,'checkpoint.pt')
+            path_save=os.path.join(self.checkpoint_path,'checkpoint.pth')
         else:
-            path_save=os.path.join(self.best_model_path,'best_model.pt')
+            path_save=os.path.join(self.best_model_path,'best_model.pth')
         torch.save(data, path_save)
 
 
@@ -317,7 +317,7 @@ class TrainAgentRenforce(nn.Module):
 
         running_rewards= []
 
-        for episode in range(self.num_episode):
+        for episode in range(self.start_episode,self.num_episode):
 
             self.reinforceagent.policy.train()
 

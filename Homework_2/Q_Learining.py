@@ -115,6 +115,7 @@ class DQNAgent:
                  obs_dim,
                  n_action,
                  replay_buffer: ReplayBuffer,
+                 writer:SummaryWriter,
                  lr=0.001,
                  gamma=0.99,
                  batch_size=16,
@@ -122,11 +123,14 @@ class DQNAgent:
                  epsilon_end=0.05,
                  epsilon_decay= 10000,
                  device="cpu",
-                 target_update_freq= 1000):
+                 target_update_freq= 1000,
+                 path_experiment=None
+                 ):
         
         self.device= device
         self.replay_buffer= replay_buffer
         self.n_action= n_action
+        self.writer= writer
         self.lr= lr
         self.gamma= gamma
         self.batch_size= batch_size
@@ -135,6 +139,8 @@ class DQNAgent:
         self.epsilon_decay= epsilon_decay
         self.target_update_freq= target_update_freq
         self.total_step=0
+        self.start_episode=0
+        self.path_experiment= path_experiment
 
         #Rete online si aggiorna passo dopo passo e vi calcolo la LOSS
         self.q_network= QNetwork(obs_dim=obs_dim, n_action=n_action).to(device)
@@ -146,6 +152,46 @@ class DQNAgent:
 
         self.optimizer= optim.AdamW(params=self.q_network.parameters(), lr=lr)
         self.epsilon= epsilon_start
+
+
+    def save_hyperparamtres(self):
+        dict_hp={
+            'learning rate': self.lr,
+            'batch size': self.batch_size,
+            'epsilon start': self.espilon_start,
+            'epsilon decay': self.epsilon_decay,
+            'gamma':self.gamma,
+            'update frequency': self.target_update_freq
+        }
+
+        df= pd.DataFrame(dict_hp, index=[0])
+        df.to_csv(os.path.join(self.path_experiment,"hyperparametres.csv"), index=False)
+
+    def save_checkpoint(self,episode,best_value,checkpoint=False):
+        data={
+            'episode': episode,
+            'epsilon': self.epsilon,
+            'QNetwork': self.q_network.state_dict(),
+            'QTarget': self.q_target.state_dict(),
+            'optimizer_state_dict': self.optimizer.state_dict()
+        }
+        if checkpoint:
+            path_save = os.path.join(self.path_experiment,"checkpoint.pth")
+        else:
+            path_save= os.path.join(self.path_experiment,"best_model.pth")
+        torch.save(data, path_save)
+
+
+    def load_checkpoint(self,path):
+        data= torch.load(path, map_location="cpu")
+        self.q_network.load_state_dict(data["QNetwork"])
+        self.q_target.load_state_dict(data["QTarget"])
+        self.epsilon= data["epsilon"]
+        self.start_episode= data["episode"]+1
+        self.optimizer.load_state_dict(data["optimizer_state_dict"])
+
+        
+        
 
     #aggiorno la epsilon in modo da avere un carattere più stocastico all' inizio quindi di scelta casuale e maggiroe esplorazione
     #Piano piano la epsilon decresce del fattore diventando al minimo 0.05 e quindi porta a un comportamento deterministico
@@ -168,7 +214,7 @@ class DQNAgent:
             return int(torch.argmax(q_values, dim=1).item())
     '''da ricordare non si mette model.train o eval perchè non ho dropout ne batch norm essendo che la rete è un semplice MLP
     ''' 
-    def training_step(self):
+    def training_step(self, episode):
         #prima di tutto devo controllare se il replay buffer ha una dimensione pari a un batch 
         if len(self.replay_buffer)< self.batch_size:
             return
@@ -198,11 +244,13 @@ class DQNAgent:
         
         if self.total_step % self.target_update_freq==0:
             self.q_target.load_state_dict(self.q_network.state_dict())
+            print(f'Update QTarget network!')
+        self.writer.add_scalar("Training/Loss (MSE)", loss.item(), episode)
 
-def train(env, agent: DQNAgent, num_episode= 500):
+def train(self,env, agent: DQNAgent, num_episode= 500):
     #collezziono i ritorni per ogni episodio
     episode_rewards=[]
-    for episode in range(num_episode):
+    for episode in range(agent.start_episode, num_episode):
         obs= env.reset()[0]
         episode_reward=0
         done=False
@@ -219,14 +267,19 @@ def train(env, agent: DQNAgent, num_episode= 500):
                 obs,action, reward, next_obs, done
             )
             #step di training dell'agente sulla base di quello che è successo 
-            agent.training_step()
+            agent.training_step(episode)
             obs= next_obs
             #sommo le reward che ho ottenuto
             episode_reward+=reward
         
         episode_rewards.append(episode_reward)
         print(f'Episode {episode}, reward: {episode_reward:.2f}, Epsilon: {agent.epsilon:.3f}')
-    
+        if episode %10==0:
+            avg_reward_validation=evaluation(env ,agent, num_episode_val=50)
+            agent.writer.add_scalar("Evaluetion/Average Reward",avg_reward_validation,episode)
+
+        agent.writer.add_scalar("Training/Reward", episode_reward,episode)
+
     return episode_rewards
 
 def evaluation(env, agent: DQNAgent, num_episode_val):
