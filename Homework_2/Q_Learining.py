@@ -9,6 +9,7 @@ import torch.nn.functional as F
 import matplotlib.pyplot as plt
 from torch.utils.tensorboard import SummaryWriter
 import os
+from tqdm import tqdm
 import copy
 
 '''
@@ -19,59 +20,53 @@ Un altra importante caratteristica è che esso è circolare, ovvero ha una capac
 a sovrascrivere le esperienze nuve su quelle passate 
 '''
 class ReplayBuffer:
-    def __init__(self, capacity, obs_shape,device):
-        self.capacity= int(capacity)
-        self.device= device
-        self.pos= 0
-        self.size=0
+    def __init__(self, capacity, obs_shape, device="cpu"):
+        self.capacity = int(capacity)
+        self.device = device
+        self.pos = 0
+        self.size = 0
 
-        obs_dim= np.prod(obs_shape)
-        #allocazione memoria del buffer
-        #allocazione dello stato attuale 
-        self.observation_buffer = torch.zeros((self.capacity, obs_dim))
-        #allocazione dello stato successivo
-        self.next_observation_buffer= torch.zeros((self.capacity, obs_dim))
-        #allocazione per le azioni compiute
-        self.acttion_buffer= torch.zeros((self.capacity,))
-        #allocazione dei reward ottenuti
-        self.reward_buffer= torch.zeros((self.capacity,))
-        #allocazione se episodio finito
-        self.done_buffer= torch.zeros((self.capacity,))
-    '''
-    In questo metodo aggiungiamo la singola transazione compiuta, in questo caso viene data la circolarità del buffer tramite il calcolo della posizione
-    nel buffer in modo circolare 
-    '''
-    def add(self, observation, action, reward, next_observation,done):
-        #Trasformo in array perchè solo al momento del sampling serve che siano tensori se no troppa allocazione
-        #di memoria
-        self.observation_buffer[self.pos]= np.array(observation).reshape(-1)
-        self.next_observation_buffer[self.pos]= np.array(next_observation).reshape(-1)
-        self.acttion_buffer[self.pos]= action
-        self.reward_buffer[self.pos]= reward
-        self.done_buffer[self.pos]= float(done)
+        obs_dim = np.prod(obs_shape)
+        # allocazione memoria del buffer come tensori PyTorch sul device
+        self.observation_buffer = torch.zeros((self.capacity, obs_dim), dtype=torch.float32, device=self.device)
+        self.next_observation_buffer = torch.zeros((self.capacity, obs_dim), dtype=torch.float32, device=self.device)
+        self.action_buffer = torch.zeros((self.capacity,), dtype=torch.long, device=self.device)
+        self.reward_buffer = torch.zeros((self.capacity,), dtype=torch.float32, device=self.device)
+        self.done_buffer = torch.zeros((self.capacity,), dtype=torch.float32, device=self.device)
 
-        #Quando pos arriva alla fine riparte con il primo indice nel tensore
-        self.pos= (self.pos + 1) % self.capacity
-        #ovviamente si carica in memoria dei tensori che hanno già capacità massima quindi devo aggiornare anche la size
-        #in modo tale che quando campiono non vado a prendere posizioni vuote all' interno dei tensori
-        self.size= min(self.size+1, self.capacity)
-        #in questo modo scelgo il minimo e quindi sono sempre dentro la grandezza effettiva del tensore diverso da 0
+    def add(self, observation, action, reward, next_observation, done):
+        # converto direttamente in tensori sul device
+        obs_tensor = torch.as_tensor(observation, dtype=torch.float32, device=self.device).reshape(-1)
+        next_obs_tensor = torch.as_tensor(next_observation, dtype=torch.float32, device=self.device).reshape(-1)
+        action_tensor = torch.as_tensor(action, dtype=torch.long, device=self.device)
+        reward_tensor = torch.as_tensor(reward, dtype=torch.float32, device=self.device)
+        done_tensor = torch.as_tensor(done, dtype=torch.float32, device=self.device)
+
+        # salvo nel buffer
+        self.observation_buffer[self.pos] = obs_tensor
+        self.next_observation_buffer[self.pos] = next_obs_tensor
+        self.action_buffer[self.pos] = action_tensor
+        self.reward_buffer[self.pos] = reward_tensor
+        self.done_buffer[self.pos] = done_tensor
+
+        # gestione circolare del buffer
+        self.pos = (self.pos + 1) % self.capacity
+        self.size = min(self.size + 1, self.capacity)
 
     def sample(self, batch_size):
-        
-        #in questo modo creo un array di indici random per la grandezza del batch
-        idxs= np.random.randint(0, self.size, size=batch_size)
+        idxs = np.random.randint(0, self.size, size=batch_size)
 
-        obs= torch.tensor(self.observation_buffer[idxs], device=self.device)
-        actions= torch.tensor(self.acttion_buffer[idxs], device=self.device)
-        rewards= torch.tensor(self.reward_buffer[idxs],device = self.device)
-        next_obs= torch.tensor(self.next_observation_buffer[idxs], device=self.device)
-        done = torch.tensor(self.done_buffer[idxs], device = self.device)
+        obs = self.observation_buffer[idxs]
+        actions = self.action_buffer[idxs]
+        rewards = self.reward_buffer[idxs]
+        next_obs = self.next_observation_buffer[idxs]
+        done = self.done_buffer[idxs]
 
         return obs, actions, rewards, next_obs, done
-    
+
     def __len__(self):
         return self.size
+
 
 
 '''Andiamo adesso a definire la rete QNetwork, ovvero colei che approssima la funzione Q 
@@ -116,15 +111,15 @@ class DQNAgent:
                  n_action,
                  replay_buffer: ReplayBuffer,
                  writer:SummaryWriter,
+                 device="cpu",
                  path_experiment=None,
                  hidden_size= 128,
-                 lr=0.001,
+                 lr=0.0001,
                  gamma=0.99,
                  batch_size=16,
                  epsilon_start=1.0,
                  epsilon_end=0.05,
                  epsilon_decay= 10000,
-                 device="cpu",
                  target_update_freq= 1000
                  ):
         
@@ -135,8 +130,8 @@ class DQNAgent:
         self.lr= lr
         self.gamma= gamma
         self.batch_size= batch_size
-        self.espilon_start= epsilon_start
-        self.epislon_end=epsilon_end
+        self.epsilon_start= epsilon_start
+        self.epsilon_end=epsilon_end
         self.epsilon_decay= epsilon_decay
         self.target_update_freq= target_update_freq
         self.total_step=0
@@ -151,7 +146,7 @@ class DQNAgent:
         #poichè mi da il massimo ritorno atteso nello stato successivo
         self.q_target= QNetwork(obs_dim=obs_dim, n_action=n_action,hidden_size=hidden_size).to(device)
         #partono con gli stessi pesi 
-        self.q_target.load_state_dict(self.q_network)
+        self.q_target.load_state_dict(self.q_network.state_dict())
 
         self.optimizer= optim.AdamW(params=self.q_network.parameters(), lr=lr)
         self.epsilon= epsilon_start
@@ -162,11 +157,11 @@ class DQNAgent:
             self._save_hyperparamtres()
 
 
-    def __save_hyperparamtres(self):
+    def _save_hyperparamtres(self):
         dict_hp={
             'learning rate': self.lr,
             'batch size': self.batch_size,
-            'epsilon start': self.espilon_start,
+            'epsilon start': self.epsilon_start,
             'epsilon decay': self.epsilon_decay,
             'gamma':self.gamma,
             'update frequency': self.target_update_freq,
@@ -209,7 +204,7 @@ class DQNAgent:
     def _update_epsilon(self):
         self.epsilon = max(
             self.epsilon_end,
-            self.epsilon_start - (self.epsilon_start - self.epsilon_end) * (self.total_steps / self.epsilon_decay)
+            self.epsilon_start - (self.epsilon_start - self.epsilon_end) * (self.total_step / self.epsilon_decay)
         )
 
     def _take_action(self,state):
@@ -229,8 +224,10 @@ class DQNAgent:
         #prima di tutto devo controllare se il replay buffer ha una dimensione pari a un batch 
         if len(self.replay_buffer)< self.batch_size:
             return
-        
+        criterion= nn.MSELoss()
         obs,action, reward,next_obs,done =self.replay_buffer.sample(self.batch_size)
+
+        
         #ritorno atteso della rete principale
         q_values= self.q_network(obs)
         #essendo che ho un tensore della forma [batch_size, num_action], devo prendere le azioni che sono state intraprese con [batch,1]
@@ -246,7 +243,7 @@ class DQNAgent:
             # r_t + gamma (1-d_t) * max Q(s_t+1,a')
             target= reward + self.gamma* (1-done)*next_q_max
         #ora che ho la ricompensa target posso calcolare MSE per la loss rispetto a quella della rete
-        loss= nn.functional.mse_loss(q_values, target)
+        loss= criterion(q_values, target)
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
@@ -255,16 +252,17 @@ class DQNAgent:
         
         if self.total_step % self.target_update_freq==0:
             self.q_target.load_state_dict(self.q_network.state_dict())
-            print(f'Update QTarget network!')
+            tqdm.write(f'Update QTarget network!')
         self.writer.add_scalar("Training/Loss (MSE)", loss.item(), episode)
 
-    def train(self,env, num_episode= 500,num_episode_val= 10):
+    def train(self,env, env_val,num_episode= 500,num_episode_val= 10):
         #collezziono i ritorni per ogni episodio
         episode_rewards=[]
-        for episode in range(self.start_episode, num_episode):
+        for episode in tqdm(range(self.start_episode, num_episode), desc= "Train Epsiode"):
             obs= env.reset()[0]
             episode_reward=0
             done=False
+            self.q_network.train()
 
             while not done:
                 #l'agente prende un azione con epsilon greedy inizialmente
@@ -273,6 +271,7 @@ class DQNAgent:
                 next_obs, reward,terminated, truncated,_= env.step(action)
                 #verifico se l'episodio è finito perchè fallito oppure terminato
                 done = terminated or truncated
+                reward = max(min(reward, 1.0), -1.0)
                 #aggiungo esperienza al replay buffer
                 self.replay_buffer.add(
                     obs,action, reward, next_obs, done
@@ -284,9 +283,9 @@ class DQNAgent:
                 episode_reward+=reward
             
             episode_rewards.append(episode_reward)
-            print(f'Episode {episode}, reward: {episode_reward:.2f}, Epsilon: {self.epsilon:.3f}')
+            tqdm.write(f'Episode {episode}, reward: {episode_reward:.2f}, Epsilon: {self.epsilon:.3f}')
             if episode %10==0:
-                avg_reward_validation=self.evaluation(env , num_episode_val)
+                avg_reward_validation=self.evaluation(env_val , num_episode_val)
                 self.writer.add_scalar("Evaluetion/Average Reward",avg_reward_validation,episode)
 
             if avg_reward_validation>= self.best_value_valid:
@@ -302,28 +301,30 @@ class DQNAgent:
         old_epsilon=copy.deepcopy(self.epsilon)
         #imposto quindi la scelta deterministica dell' azione (greedy)
         self.epsilon=0
+        self.q_network.eval()
         
         episode_rewards=[]
-        for episode in range(num_episode_val):
-            obs= env.reset()[0]
-            done =False
-            episode_reward=0
+        with torch.no_grad():
+            for episode in tqdm(range(num_episode_val),desc="Evaluetion Epsiode",leave=False):
+                obs= env.reset()[0]
+                done =False
+                episode_reward=0
 
-            while not done:
-                obs_tensor= torch.tensor(obs, device= self.device).unsqueeze(0)
-                q_values= self.q_network(obs_tensor)
-                action= int(torch.argmax(q_values, dim=1).item())
+                while not done:
+                    obs_tensor= torch.tensor(obs, device= self.device).unsqueeze(0)
+                    q_values= self.q_network(obs_tensor)
+                    action= int(torch.argmax(q_values, dim=1).item())
 
-                next_obs,reward,terminate,truncated, _= env.step(action)
-                done = terminate or truncated
+                    next_obs,reward,terminate,truncated, _= env.step(action)
+                    done = terminate or truncated
 
-                obs = next_obs
-                episode_reward+=reward
-            episode_rewards.append(episode_reward)
+                    obs = next_obs
+                    episode_reward+=reward
+                episode_rewards.append(episode_reward)
         #ripristino la epsilon greedy 
         self.epsilon= old_epsilon
         avg_reward= sum(episode_rewards)/ num_episode_val
-        print(f'Avergae reward of evaluation of agent network {avg_reward}')
+        tqdm.write(f'Avergae reward of evaluation of agent network {avg_reward}')
         return avg_reward
 
 

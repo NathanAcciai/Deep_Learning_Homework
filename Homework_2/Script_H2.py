@@ -11,15 +11,15 @@
 # **First Things First**: Spend some time playing with the environment to make sure you understand how it works.
 
 # %%
-import gymnasium as gym
-import torch
-import torch.nn as nn
-import torch.optim as optim
-import torch.nn.functional as F
-
-# Instantiate a rendering and a non-rendering environment.
-env_render = gym.make('CartPole-v1', render_mode='human')
-env = gym.make('CartPole-v1')
+#import gymnasium as gym
+#import torch
+#import torch.nn as nn
+#import torch.optim as optim
+#import torch.nn.functional as F
+#
+## Instantiate a rendering and a non-rendering environment.
+#env_render = gym.make('CartPole-v1', render_mode='human')
+#env = gym.make('CartPole-v1')
 
 # %% [markdown]
 # CartPole è un carrello che può muoversi a sinistra o a destra su un binario, sopra il carello è montato un pali collegato con una cerniera alla base, l'agente deve bilanciare il palo muovendo il carello 
@@ -339,6 +339,7 @@ for key,value in config.Config.items():
     agent_name= key
     if value["human"]==False:
         env= gym.make(value["env_id"])
+        env_validation= gym.make(value["env_id"])
     else:
         env= gym.make(value["env_id"], render_mode="human")
     obs_dim = env.observation_space.shape[0]
@@ -350,14 +351,17 @@ for key,value in config.Config.items():
     path= f"{path_base}/{agent_name}/{name}"
     logdir_exp= f"{logdir}/{agent_name}/{name}"
     writer= SummaryWriter(logdir_exp)
+    print(f"Train Agent {agent_name}")
     agent= QL.DQNAgent(obs_dim,
                        action_dim,
                        replay_buffer,
                        writer,
+                       device,
                        path,
-                       value["hidden_size"])
+                       value["hidden_size"],
+                       batch_size=256)
     
-    agent.train(env,value["num_episode_train"],value["num_episode_validation"])
+    agent.train(env,env_validation,value["num_episode_train"],value["num_episode_validation"])
 
 
 
