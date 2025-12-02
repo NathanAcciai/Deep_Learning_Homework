@@ -116,6 +116,8 @@ class DQNAgent:
                  n_action,
                  replay_buffer: ReplayBuffer,
                  writer:SummaryWriter,
+                 path_experiment=None,
+                 hidden_size= 128,
                  lr=0.001,
                  gamma=0.99,
                  batch_size=16,
@@ -123,8 +125,7 @@ class DQNAgent:
                  epsilon_end=0.05,
                  epsilon_decay= 10000,
                  device="cpu",
-                 target_update_freq= 1000,
-                 path_experiment=None
+                 target_update_freq= 1000
                  ):
         
         self.device= device
@@ -141,69 +142,79 @@ class DQNAgent:
         self.total_step=0
         self.start_episode=0
         self.path_experiment= path_experiment
+        self.best_value_valid= -float("inf")
+        self.hidden_size= hidden_size
 
         #Rete online si aggiorna passo dopo passo e vi calcolo la LOSS
-        self.q_network= QNetwork(obs_dim=obs_dim, n_action=n_action).to(device)
+        self.q_network= QNetwork(obs_dim=obs_dim, n_action=n_action, hidden_size=hidden_size).to(device)
         #rete che viene aggiornata periodicamente e serve per stabilizzare l'addestramento 
         #poichè mi da il massimo ritorno atteso nello stato successivo
-        self.q_target= QNetwork(obs_dim=obs_dim, n_action=n_action).to(device)
+        self.q_target= QNetwork(obs_dim=obs_dim, n_action=n_action,hidden_size=hidden_size).to(device)
         #partono con gli stessi pesi 
         self.q_target.load_state_dict(self.q_network)
 
         self.optimizer= optim.AdamW(params=self.q_network.parameters(), lr=lr)
         self.epsilon= epsilon_start
+        if os.path.exists(self.path_experiment):
+            self._load_checkpoint()
+        else:
+            os.makedirs(self.path_experiment, exist_ok=True)
+            self._save_hyperparamtres()
 
 
-    def save_hyperparamtres(self):
+    def __save_hyperparamtres(self):
         dict_hp={
             'learning rate': self.lr,
             'batch size': self.batch_size,
             'epsilon start': self.espilon_start,
             'epsilon decay': self.epsilon_decay,
             'gamma':self.gamma,
-            'update frequency': self.target_update_freq
+            'update frequency': self.target_update_freq,
+            "hidden_size": self.hidden_size
         }
 
         df= pd.DataFrame(dict_hp, index=[0])
         df.to_csv(os.path.join(self.path_experiment,"hyperparametres.csv"), index=False)
 
-    def save_checkpoint(self,episode,best_value,checkpoint=False):
-        data={
-            'episode': episode,
-            'epsilon': self.epsilon,
-            'QNetwork': self.q_network.state_dict(),
-            'QTarget': self.q_target.state_dict(),
-            'optimizer_state_dict': self.optimizer.state_dict()
-        }
+    def _save_checkpoint(self,episode,checkpoint=False,data=None):
+        if data==None:
+            data={
+                'episode': episode,
+                'epsilon': self.epsilon,
+                'QNetwork': self.q_network.state_dict(),
+                'QTarget': self.q_target.state_dict(),
+                'optimizer_state_dict': self.optimizer.state_dict(),
+                'best_value_validation': self.best_value_valid
+            }
         if checkpoint:
             path_save = os.path.join(self.path_experiment,"checkpoint.pth")
         else:
             path_save= os.path.join(self.path_experiment,"best_model.pth")
         torch.save(data, path_save)
+        return data
 
 
-    def load_checkpoint(self,path):
+    def _load_checkpoint(self,path):
         data= torch.load(path, map_location="cpu")
         self.q_network.load_state_dict(data["QNetwork"])
         self.q_target.load_state_dict(data["QTarget"])
         self.epsilon= data["epsilon"]
         self.start_episode= data["episode"]+1
         self.optimizer.load_state_dict(data["optimizer_state_dict"])
+        self.best_value_valid= data["best_value_validation"]
 
         
-        
-
     #aggiorno la epsilon in modo da avere un carattere più stocastico all' inizio quindi di scelta casuale e maggiroe esplorazione
     #Piano piano la epsilon decresce del fattore diventando al minimo 0.05 e quindi porta a un comportamento deterministico
-    def update_epsilon(self):
+    def _update_epsilon(self):
         self.epsilon = max(
             self.epsilon_end,
             self.epsilon_start - (self.epsilon_start - self.epsilon_end) * (self.total_steps / self.epsilon_decay)
         )
 
-    def take_action(self,state):
+    def _take_action(self,state):
         self.total_step += 1
-        self.update_epsilon()
+        self._update_epsilon()
 
         #numero casuale tra 0 e 1 , fa si che quando epsilon scende allora avrò sempre meno esplorazioni.
         if np.random.random() < self.epsilon:
@@ -214,7 +225,7 @@ class DQNAgent:
             return int(torch.argmax(q_values, dim=1).item())
     '''da ricordare non si mette model.train o eval perchè non ho dropout ne batch norm essendo che la rete è un semplice MLP
     ''' 
-    def training_step(self, episode):
+    def _training_step(self, episode):
         #prima di tutto devo controllare se il replay buffer ha una dimensione pari a un batch 
         if len(self.replay_buffer)< self.batch_size:
             return
@@ -247,75 +258,79 @@ class DQNAgent:
             print(f'Update QTarget network!')
         self.writer.add_scalar("Training/Loss (MSE)", loss.item(), episode)
 
-def train(self,env, agent: DQNAgent, num_episode= 500):
-    #collezziono i ritorni per ogni episodio
-    episode_rewards=[]
-    for episode in range(agent.start_episode, num_episode):
-        obs= env.reset()[0]
-        episode_reward=0
-        done=False
+    def train(self,env, num_episode= 500,num_episode_val= 10):
+        #collezziono i ritorni per ogni episodio
+        episode_rewards=[]
+        for episode in range(self.start_episode, num_episode):
+            obs= env.reset()[0]
+            episode_reward=0
+            done=False
 
-        while not done:
-            #l'agente prende un azione con epsilon greedy inizialmente
-            action= agent.take_action(obs)
-            #vado dunque a eseguire l'azione nell' ambiente 
-            next_obs, reward,terminated, truncated,_= env.step(action)
-            #verifico se l'episodio è finito perchè fallito oppure terminato
-            done = terminated or truncated
-            #aggiungo esperienza al replay buffer
-            agent.replay_buffer.add(
-                obs,action, reward, next_obs, done
-            )
-            #step di training dell'agente sulla base di quello che è successo 
-            agent.training_step(episode)
-            obs= next_obs
-            #sommo le reward che ho ottenuto
-            episode_reward+=reward
+            while not done:
+                #l'agente prende un azione con epsilon greedy inizialmente
+                action= self._take_action(obs)
+                #vado dunque a eseguire l'azione nell' ambiente 
+                next_obs, reward,terminated, truncated,_= env.step(action)
+                #verifico se l'episodio è finito perchè fallito oppure terminato
+                done = terminated or truncated
+                #aggiungo esperienza al replay buffer
+                self.replay_buffer.add(
+                    obs,action, reward, next_obs, done
+                )
+                #step di training dell'agente sulla base di quello che è successo 
+                self._training_step(episode)
+                obs= next_obs
+                #sommo le reward che ho ottenuto
+                episode_reward+=reward
+            
+            episode_rewards.append(episode_reward)
+            print(f'Episode {episode}, reward: {episode_reward:.2f}, Epsilon: {self.epsilon:.3f}')
+            if episode %10==0:
+                avg_reward_validation=self.evaluation(env , num_episode_val)
+                self.writer.add_scalar("Evaluetion/Average Reward",avg_reward_validation,episode)
+
+            if avg_reward_validation>= self.best_value_valid:
+                self.best_value_valid= avg_reward_validation
+                best_model= self._save_checkpoint(episode, True)
+                
+            self.writer.add_scalar("Training/Reward", episode_reward,episode)
+        self._save_checkpoint(episode,False,best_model)
+        return episode_rewards
+
+    def evaluation(self,env, num_episode_val):
+        #serve per ripristinare la epsilon che ho in train 
+        old_epsilon=copy.deepcopy(self.epsilon)
+        #imposto quindi la scelta deterministica dell' azione (greedy)
+        self.epsilon=0
         
-        episode_rewards.append(episode_reward)
-        print(f'Episode {episode}, reward: {episode_reward:.2f}, Epsilon: {agent.epsilon:.3f}')
-        if episode %10==0:
-            avg_reward_validation=evaluation(env ,agent, num_episode_val=50)
-            agent.writer.add_scalar("Evaluetion/Average Reward",avg_reward_validation,episode)
+        episode_rewards=[]
+        for episode in range(num_episode_val):
+            obs= env.reset()[0]
+            done =False
+            episode_reward=0
 
-        agent.writer.add_scalar("Training/Reward", episode_reward,episode)
+            while not done:
+                obs_tensor= torch.tensor(obs, device= self.device).unsqueeze(0)
+                q_values= self.q_network(obs_tensor)
+                action= int(torch.argmax(q_values, dim=1).item())
 
-    return episode_rewards
+                next_obs,reward,terminate,truncated, _= env.step(action)
+                done = terminate or truncated
 
-def evaluation(env, agent: DQNAgent, num_episode_val):
-    #serve per ripristinare la epsilon che ho in train 
-    old_epsilon=copy.deepcopy(agent.epsilon)
-    #imposto quindi la scelta deterministica dell' azione (greedy)
-    agent.epsilon=0
-    
-    episode_rewards=[]
-    for episode in range(num_episode_val):
-        obs= env.reset()[0]
-        done =False
-        episode_reward=0
-
-        while not done:
-            obs_tensor= torch.tensor(obs, device= agent.device).unsqueeze(0)
-            q_values= agent.q_network(obs_tensor)
-            action= int(torch.argmax(q_values, dim=1).item())
-
-            next_obs,reward,terminate,truncated, _= env.step(action)
-            done = terminate or truncated
-
-            obs = next_obs
-            episode_reward+=reward
-        episode_rewards.append(episode_reward)
-    #ripristino la epsilon greedy 
-    agent.epsilon= old_epsilon
-    avg_reward= sum(episode_rewards)/ num_episode_val
-    print(f'Avergae reward of evaluation of agent network {avg_reward}')
-    return avg_reward
+                obs = next_obs
+                episode_reward+=reward
+            episode_rewards.append(episode_reward)
+        #ripristino la epsilon greedy 
+        self.epsilon= old_epsilon
+        avg_reward= sum(episode_rewards)/ num_episode_val
+        print(f'Avergae reward of evaluation of agent network {avg_reward}')
+        return avg_reward
 
 
 
 
 
-    
+        
 
 
 

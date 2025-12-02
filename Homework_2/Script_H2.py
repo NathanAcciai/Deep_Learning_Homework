@@ -237,72 +237,72 @@ env = gym.make('CartPole-v1')
 # **Your Task**: Modify your implementation to fit a second, baseline network to estimate the value function and use it as **baseline**. 
 
 
-import numpy as np
-import gymnasium as gym
-import torch 
-import torch.nn as nn
-import torch.optim as optim
-from torch.distributions import Categorical
-import torch.nn.functional as F
-import matplotlib.pyplot as plt
-from torch.utils.tensorboard import SummaryWriter
-import os
-import datetime
-from reinforce_cartpole import PolicyNetwork, ReinforceAgent, TrainAgentRenforce
-#import pygame
-#_ = pygame.init()
-
-
-
-#env = gym.make("CartPole-v1", render_mode="human")
-env = gym.make("CartPole-v1")
-#pygame.display.init() 
-name_agent="CartPole_REINFORCE"
-normalizzation_discount=False
-baseline_discount=False
-temperature_train=[0.3, 0.5, 0.7, 1 , 1.5, 2]
-lr_value_net= [1e-2,1e-3,1e-4]
-for temp in temperature_train:
-    for lr_vnet in lr_value_net:
-        now= datetime.datetime.now()
-        data_ora_formattata = now.strftime("%d_%m_%yT%H_%M")
-        name= f'run_{data_ora_formattata}'
-        general_path= f'Reinforcment_Learning_Value_Net/{name_agent}_{data_ora_formattata}_temp_{temp}'
-
-        checkpoint_path=general_path+"/checkpoint"
-        bestmodel_path= general_path+"/best_model"
-        hyperparamtres_path= general_path+"/hyperparametres"
-
-        obs_dim = env.observation_space.shape[0]
-        action_dim = env.action_space.n
-
-        policy = PolicyNetwork(obs_dim=obs_dim, action_dim=action_dim)
-
-        logdir= f'tensorboard/Reinforcment_Learning_Value_Net/{name_agent}/{name}_temp_{temp}'
-
-        agent = ReinforceAgent(
-            enviroment=env,
-            logdir=logdir, 
-            policy=policy,
-            gamma=0.99,
-            max_lenght=500,
-            value_net=True
-        )
-
-        trainer = TrainAgentRenforce(
-            reinforcagent=agent,
-            lr=1e-2,
-            num_episode=500,
-            num_episode_validation=10,
-            check_val=10,
-            checkpoint_path=checkpoint_path,
-            best_model_path=bestmodel_path,
-            hyperparams_path=hyperparamtres_path,
-            temperature_train=temp,
-            lr_value_net=lr_vnet
-        )
-        running_rewards = trainer.train_agent()
-
+#import numpy as np
+#import gymnasium as gym
+#import torch 
+#import torch.nn as nn
+#import torch.optim as optim
+#from torch.distributions import Categorical
+#import torch.nn.functional as F
+#import matplotlib.pyplot as plt
+#from torch.utils.tensorboard import SummaryWriter
+#import os
+#import datetime
+#from reinforce_cartpole import PolicyNetwork, ReinforceAgent, TrainAgentRenforce
+##import pygame
+##_ = pygame.init()
+#
+#
+#
+##env = gym.make("CartPole-v1", render_mode="human")
+#env = gym.make("CartPole-v1")
+##pygame.display.init() 
+#name_agent="CartPole_REINFORCE"
+#normalizzation_discount=False
+#baseline_discount=False
+#temperature_train=[0.3, 0.5, 0.7, 1 , 1.5, 2]
+#lr_value_net= [1e-2,1e-3,1e-4]
+#for temp in temperature_train:
+#    for lr_vnet in lr_value_net:
+#        now= datetime.datetime.now()
+#        data_ora_formattata = now.strftime("%d_%m_%yT%H_%M")
+#        name= f'run_{data_ora_formattata}'
+#        general_path= f'Reinforcment_Learning_Value_Net/{name_agent}_{data_ora_formattata}_temp_{temp}'
+#
+#        checkpoint_path=general_path+"/checkpoint"
+#        bestmodel_path= general_path+"/best_model"
+#        hyperparamtres_path= general_path+"/hyperparametres"
+#
+#        obs_dim = env.observation_space.shape[0]
+#        action_dim = env.action_space.n
+#
+#        policy = PolicyNetwork(obs_dim=obs_dim, action_dim=action_dim)
+#
+#        logdir= f'tensorboard/Reinforcment_Learning_Value_Net/{name_agent}/{name}_temp_{temp}'
+#
+#        agent = ReinforceAgent(
+#            enviroment=env,
+#            logdir=logdir, 
+#            policy=policy,
+#            gamma=0.99,
+#            max_lenght=500,
+#            value_net=True
+#        )
+#
+#        trainer = TrainAgentRenforce(
+#            reinforcagent=agent,
+#            lr=1e-2,
+#            num_episode=500,
+#            num_episode_validation=10,
+#            check_val=10,
+#            checkpoint_path=checkpoint_path,
+#            best_model_path=bestmodel_path,
+#            hyperparams_path=hyperparamtres_path,
+#            temperature_train=temp,
+#            lr_value_net=lr_vnet
+#        )
+#        running_rewards = trainer.train_agent()
+#
 # %% [markdown]
 # -----
 # ## Exercise 3: Going Deeperq
@@ -316,6 +316,54 @@ for temp in temperature_train:
 # ### Exercise 3.2: Solving Cartpole and Lunar Lander with `Deep Q-Learning` (harder)
 # 
 # On policy Deep Reinforcement Learning tends to be **very unstable**. Write an implementation (or adapt an existing one) of `Deep Q-Learning` to solve our two environments (Cartpole and Lunar Lander). To do this you will need to implement a **Replay Buffer** and use a second, slow-moving **target Q-Network** to stabilize learning.
+import numpy as np
+import gymnasium as gym
+import torch 
+import torch.nn as nn
+import torch.optim as optim
+from torch.distributions import Categorical
+import torch.nn.functional as F
+import matplotlib.pyplot as plt
+from torch.utils.tensorboard import SummaryWriter
+import os
+import datetime
+import Q_Learining as QL
+import config
+
+#_ = pygame.init()
+
+path_base="Reinforcement_Learning_CartLunar"
+logdir= f"tensorboard/{path_base}"
+device= "cuda" if torch.cuda.is_available() else "cpu"
+for key,value in config.Config.items():
+    agent_name= key
+    if value["human"]==False:
+        env= gym.make(value["env_id"])
+    else:
+        env= gym.make(value["env_id"], render_mode="human")
+    obs_dim = env.observation_space.shape[0]
+    action_dim = env.action_space.n
+    replay_buffer= QL.ReplayBuffer(value["replay_buffer_size"],obs_dim,device)
+    now= datetime.datetime.now()
+    data_ora_formattata = now.strftime("%d_%m_%yT%H_%M")
+    name= f'run_{data_ora_formattata}'
+    path= f"{path_base}/{agent_name}/{name}"
+    logdir_exp= f"{logdir}/{agent_name}/{name}"
+    writer= SummaryWriter(logdir_exp)
+    agent= QL.DQNAgent(obs_dim,
+                       action_dim,
+                       replay_buffer,
+                       writer,
+                       path,
+                       value["hidden_size"])
+    
+    agent.train(env,value["num_episode_train"],value["num_episode_validation"])
+
+
+
+
+
+
 # 
 # ### Exercise 3.3: Solving the OpenAI CarRacing environment (hardest) 
 # 
