@@ -145,7 +145,7 @@ class DQNAgent:
                  gamma=0.99,
                  batch_size=16,
                  epsilon_start=1.0,
-                 epsilon_end=0.05,
+                 epsilon_end=0.1,
                  epsilon_decay= 20000
                  ):
         
@@ -164,7 +164,7 @@ class DQNAgent:
         self.path_experiment= path_experiment
         self.best_value_valid= -float("inf")
         self.hidden_size= hidden_size
-        self.tau= 0.005
+        self.tau= 0.001
 
         #Rete online si aggiorna passo dopo passo e vi calcolo la LOSS
         self.q_network= QNetwork(obs_dim=obs_dim, n_action=n_action, hidden_size=hidden_size).to(device)
