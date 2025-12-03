@@ -1,2 +1,0 @@
-learning rate,batch size,epsilon start,epsilon decay,gamma,update frequency,hidden_size
-0.0001,256,1.0,10000,0.99,300,128

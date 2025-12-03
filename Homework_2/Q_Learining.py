@@ -12,6 +12,33 @@ import os
 from tqdm import tqdm
 import copy
 
+
+import random
+import numpy as np
+import torch
+
+
+"""Settare TUTTI i seed per riproducibilità completa"""
+seed=(111)
+# 1. Python random
+random.seed(seed)
+
+# 2. NumPy (per sampling nel replay buffer, epsilon-greedy)
+np.random.seed(seed)
+
+# 3. PyTorch (pesi della rete, dropout se presente)
+torch.manual_seed(seed)
+torch.cuda.manual_seed(seed)
+torch.cuda.manual_seed_all(seed)  # se multi-GPU
+
+# 4. PyTorch CUDA backend (per performance riproducibili)
+torch.backends.cudnn.deterministic = True
+torch.backends.cudnn.benchmark = False
+
+# 5. Environment (se supporta il seed)
+# Nota: alcuni ambienti non sono completamente deterministici
+
+    
 '''
 Il Replay buffer serve nel Q-Learning per memorizzare le esperienze passate e campionandole per stabilizzare l'addestramento.
 Infatti nel REINFORCE classico le esperienze passate sono correlate tra loro e questo è uno dei punti che rende instabiole l'addestramento.
@@ -119,8 +146,7 @@ class DQNAgent:
                  batch_size=16,
                  epsilon_start=1.0,
                  epsilon_end=0.05,
-                 epsilon_decay= 10000,
-                 target_update_freq= 1000
+                 epsilon_decay= 20000
                  ):
         
         self.device= device
@@ -133,12 +159,12 @@ class DQNAgent:
         self.epsilon_start= epsilon_start
         self.epsilon_end=epsilon_end
         self.epsilon_decay= epsilon_decay
-        self.target_update_freq= target_update_freq
         self.total_step=0
         self.start_episode=0
         self.path_experiment= path_experiment
         self.best_value_valid= -float("inf")
         self.hidden_size= hidden_size
+        self.tau= 0.005
 
         #Rete online si aggiorna passo dopo passo e vi calcolo la LOSS
         self.q_network= QNetwork(obs_dim=obs_dim, n_action=n_action, hidden_size=hidden_size).to(device)
@@ -164,7 +190,6 @@ class DQNAgent:
             'epsilon start': self.epsilon_start,
             'epsilon decay': self.epsilon_decay,
             'gamma':self.gamma,
-            'update frequency': self.target_update_freq,
             "hidden_size": self.hidden_size
         }
 
@@ -172,7 +197,7 @@ class DQNAgent:
         df.to_csv(os.path.join(self.path_experiment,"hyperparametres.csv"), index=False)
 
     def _save_checkpoint(self,episode,checkpoint=False,data=None):
-        if data==None:
+        if data is None:
             data={
                 'episode': episode,
                 'epsilon': self.epsilon,
@@ -206,6 +231,15 @@ class DQNAgent:
             self.epsilon_end,
             self.epsilon_start - (self.epsilon_start - self.epsilon_end) * (self.total_step / self.epsilon_decay)
         )
+        
+
+
+    def _update_target_network(self):
+    # Soft update: θ_target = τ*θ_online + (1-τ)*θ_target
+        for target_param, online_param in zip(self.q_target.parameters(), self.q_network.parameters()):
+            target_param.data.copy_(
+                self.tau * online_param.data + (1 - self.tau) * target_param.data
+            )
 
     def _take_action(self,state):
         self.total_step += 1
@@ -222,9 +256,10 @@ class DQNAgent:
     ''' 
     def _training_step(self, episode):
         #prima di tutto devo controllare se il replay buffer ha una dimensione pari a un batch 
+        self.q_network.train() 
         if len(self.replay_buffer)< self.batch_size:
             return
-        criterion= nn.MSELoss()
+        criterion = nn.SmoothL1Loss(reduction='mean')  
         obs,action, reward,next_obs,done =self.replay_buffer.sample(self.batch_size)
 
         
@@ -235,28 +270,26 @@ class DQNAgent:
         q_values= q_values.gather(1, action.unsqueeze(1)).squeeze(1)
 
         with torch.no_grad():
-            #calcolo le ricompense target
-            next_q= self.q_target(next_obs)
-            #prendo la ricompensa massima
-            next_q_max= next_q.max(dim=1)[0]
-            #ora calolco la ricompensa target y
-            # r_t + gamma (1-d_t) * max Q(s_t+1,a')
-            target= reward + self.gamma* (1-done)*next_q_max
+            #selezione azione migliore della rete online
+            next_q = self.q_target(next_obs)
+            next_q_max = next_q.max(dim=1)[0]
+            target = reward + self.gamma * (1 - done) * next_q_max
         #ora che ho la ricompensa target posso calcolare MSE per la loss rispetto a quella della rete
+        
         loss= criterion(q_values, target)
         self.optimizer.zero_grad()
         loss.backward()
+        torch.nn.utils.clip_grad_value_(self.q_network.parameters(), 1.0)
         self.optimizer.step()
 
         #aggiorno la rete target in modo lento in maniera che abbia stabilità durante il training
         
-        if self.total_step % self.target_update_freq==0:
-            self.q_target.load_state_dict(self.q_network.state_dict())
-            tqdm.write(f'Update QTarget network!')
+        self._update_target_network()
         self.writer.add_scalar("Training/Loss (MSE)", loss.item(), episode)
 
     def train(self,env, env_val,num_episode= 500,num_episode_val= 10):
         #collezziono i ritorni per ogni episodio
+        avg_reward_validation=-float("inf")
         episode_rewards=[]
         for episode in tqdm(range(self.start_episode, num_episode), desc= "Train Epsiode"):
             obs= env.reset()[0]
@@ -271,7 +304,6 @@ class DQNAgent:
                 next_obs, reward,terminated, truncated,_= env.step(action)
                 #verifico se l'episodio è finito perchè fallito oppure terminato
                 done = terminated or truncated
-                reward = max(min(reward, 1.0), -1.0)
                 #aggiungo esperienza al replay buffer
                 self.replay_buffer.add(
                     obs,action, reward, next_obs, done

@@ -359,7 +359,7 @@ for key,value in config.Config.items():
                        device,
                        path,
                        value["hidden_size"],
-                       batch_size=256)
+                       batch_size=64)
     
     agent.train(env,env_validation,value["num_episode_train"],value["num_episode_validation"])
 
