@@ -141,12 +141,13 @@ class DQNAgent:
                  device="cpu",
                  path_experiment=None,
                  hidden_size= 128,
+                 epsilon_start=1.0,
+                 epsilon_end=0.01,
+                 epsilon_decay= 10000,
+                 target_update_freq=500,
                  lr=0.0001,
                  gamma=0.99,
-                 batch_size=16,
-                 epsilon_start=1.0,
-                 epsilon_end=0.1,
-                 epsilon_decay= 20000
+                 batch_size=16
                  ):
         
         self.device= device
@@ -165,6 +166,8 @@ class DQNAgent:
         self.best_value_valid= -float("inf")
         self.hidden_size= hidden_size
         self.tau= 0.001
+        self.target_update_freq = target_update_freq  # Aggiorna ogni 1000 step
+        self.update_counter = 0
 
         #Rete online si aggiorna passo dopo passo e vi calcolo la LOSS
         self.q_network= QNetwork(obs_dim=obs_dim, n_action=n_action, hidden_size=hidden_size).to(device)
@@ -177,7 +180,8 @@ class DQNAgent:
         self.optimizer= optim.AdamW(params=self.q_network.parameters(), lr=lr)
         self.epsilon= epsilon_start
         if os.path.exists(self.path_experiment):
-            self._load_checkpoint()
+            pass
+            #self._load_checkpoint()
         else:
             os.makedirs(self.path_experiment, exist_ok=True)
             self._save_hyperparamtres()
@@ -259,7 +263,7 @@ class DQNAgent:
         self.q_network.train() 
         if len(self.replay_buffer)< self.batch_size:
             return
-        criterion = nn.SmoothL1Loss(reduction='mean')  
+        criterion = nn.SmoothL1Loss()  
         obs,action, reward,next_obs,done =self.replay_buffer.sample(self.batch_size)
 
         
@@ -271,9 +275,9 @@ class DQNAgent:
 
         with torch.no_grad():
             #selezione azione migliore della rete online
-            next_q = self.q_target(next_obs)
-            next_q_max = next_q.max(dim=1)[0]
-            target = reward + self.gamma * (1 - done) * next_q_max
+            next_actions = self.q_network(next_obs).argmax(dim=1, keepdim=True)
+            next_q = self.q_target(next_obs).gather(1, next_actions).squeeze(1)
+            target = reward + self.gamma * (1 - done) * next_q
         #ora che ho la ricompensa target posso calcolare MSE per la loss rispetto a quella della rete
         
         loss= criterion(q_values, target)
@@ -284,7 +288,10 @@ class DQNAgent:
 
         #aggiorno la rete target in modo lento in maniera che abbia stabilità durante il training
         
-        self._update_target_network()
+        #self._update_target_network()
+        self.update_counter += 1
+        if self.update_counter % self.target_update_freq == 0:
+            self.q_target.load_state_dict(self.q_network.state_dict())
         self.writer.add_scalar("Training/Loss (MSE)", loss.item(), episode)
 
     def train(self,env, env_val,num_episode= 500,num_episode_val= 10):
@@ -292,7 +299,8 @@ class DQNAgent:
         avg_reward_validation=-float("inf")
         episode_rewards=[]
         for episode in tqdm(range(self.start_episode, num_episode), desc= "Train Epsiode"):
-            obs= env.reset()[0]
+            episode_seed = seed + episode
+            obs= env.reset(seed=episode_seed)[0]
             episode_reward=0
             done=False
             self.q_network.train()
@@ -326,6 +334,9 @@ class DQNAgent:
                 
             self.writer.add_scalar("Training/Reward", episode_reward,episode)
         self._save_checkpoint(episode,False,best_model)
+
+        self.evaluation(env_val , num_episode_val)
+
         return episode_rewards
 
     def evaluation(self,env, num_episode_val):
@@ -338,7 +349,8 @@ class DQNAgent:
         episode_rewards=[]
         with torch.no_grad():
             for episode in tqdm(range(num_episode_val),desc="Evaluetion Epsiode",leave=False):
-                obs= env.reset()[0]
+                episode_seed = seed+ episode
+                obs= env.reset(seed=episode)[0]
                 done =False
                 episode_reward=0
 
