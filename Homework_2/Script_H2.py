@@ -336,6 +336,8 @@ path_base="Reinforcement_Learning_CartLunar"
 logdir= f"tensorboard/{path_base}"
 device= "cuda" if torch.cuda.is_available() else "cpu"
 for key,value in config.Config.items():
+    if value["env_id"]=="CartPole-v1":
+        continue
     agent_name= key
     if value["human"]==False:
         env= gym.make(value["env_id"])
