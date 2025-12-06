@@ -103,9 +103,6 @@ def test_model(path_model, env_test,num_episode, render=False,name_key="cartpole
     print(f"   Reward min : {np.min(rewards)}")
     print(f"   Steps medi : {np.mean(steps_list):.1f}")
 
-    # -----------------------------------------
-    #            PLOT REWARD PER EPISODIO
-    # -----------------------------------------
     plt.figure(figsize=(10, 4))
     plt.plot(rewards, marker="o", alpha=0.7)
     plt.axhline(mean_r, color="red", linestyle="--", label=f"Mean = {mean_r:.1f}")
@@ -128,23 +125,6 @@ def test_model(path_model, env_test,num_episode, render=False,name_key="cartpole
 
 
 
-# ---------------------------------------------------------
-#                      ESEMPIO USO
-# ---------------------------------------------------------
-if __name__ == "__main__":
-    # Cambia questi due parametri.
-    #test_model(
-    #    path_model="Reinforcement_Learning_CartLunar/cartpole/run_04_12_25T15_48/best_model.pth",
-    #    env_test="CartPole-v1",
-    #    num_episode=50,
-    #    render=False
-    #)
-    test_model(
-        path_model="Reinforcement_Learning_CartLunar/lunars/run_06_12_25T16_11/best_model.pth",
-        env_test="LunarLander-v3",
-        num_episode=100,
-        render=False,
-        name_key="lunars"
-    )
+
     
 
