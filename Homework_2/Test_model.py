@@ -1,0 +1,150 @@
+import torch
+import gymnasium as gym
+import numpy as np
+from tqdm import tqdm
+import time
+import matplotlib.pyplot as plt
+import config
+
+import pygame
+from multiprocessing import Process, Queue
+
+from stats_test_windows import StatsTestWindow
+
+
+
+class QNetwork(torch.nn.Module):
+    def __init__(self, obs_dim, n_action, hidden_size=128):
+        super().__init__()
+        self.net = torch.nn.Sequential(
+            torch.nn.Linear(obs_dim, hidden_size),
+            torch.nn.ReLU(),
+            torch.nn.Linear(hidden_size, hidden_size),
+            torch.nn.ReLU(),
+            torch.nn.Linear(hidden_size, n_action),
+        )
+    
+    def forward(self, x):
+        return self.net(x)
+
+def load_model(path_model,obs_dim, n_action,name_key):
+    checkpoint = torch.load(path_model, map_location="cpu", weights_only=False)
+    Config= config.Config
+    q_net= QNetwork(obs_dim, n_action, Config[name_key]["hidden_size"])
+    
+    q_net.load_state_dict(checkpoint["QNetwork"])
+    return q_net
+
+def test_model(path_model, env_test,num_episode, render=False,name_key="cartpole"):
+    if render:
+        _ = pygame.init()
+        q = Queue()
+        window = StatsTestWindow(q, env_name=env_test)
+        p = Process(target=window.run)
+        p.start()
+
+
+    print(f'\n Caricamento del mododello per test su {env_test}')
+    if render:
+        env= gym.make(env_test, render_mode= "human")
+    else:
+        env= gym.make(env_test)
+    obs_dim= env.observation_space.shape[0]
+    n_actions= env.action_space.n
+    q_net= load_model(path_model, obs_dim, n_actions,name_key)
+    q_net.eval()
+
+    print("\n Modello caricato correttamente \n")
+    print("Avvio test")
+    rewards= []
+    steps_list= []
+
+    for ep in tqdm(range(num_episode), desc="Testing"):
+        obs,info = env.reset()
+        done = False
+        total_reward=0
+        steps= 0
+
+        while not done:
+            obs_tensor= torch.tensor(obs).unsqueeze(0)
+            with torch.no_grad():
+                q_vals= q_net(obs_tensor)
+                action= torch.argmax(q_vals, dim=1).item()
+            obs, reward, terminated, truncated,info = env.step(action)
+            done = terminated or truncated
+
+            total_reward += reward
+            steps += 1
+
+            if render:
+                time.sleep(1.0/30)
+        
+        rewards.append(total_reward)
+        steps_list.append(steps)
+        if render:
+            q.put({
+                "episode": ep + 1,
+                "reward": total_reward,
+                "steps": steps,
+                "mean_reward": np.mean(rewards),
+                "std_reward": np.std(rewards),
+                "best_reward": np.max(rewards),
+                "completed": len(rewards)
+            })
+        tqdm.write(f"Episodio {ep+1:02d} → Reward {total_reward}")
+    
+    env.close()
+    mean_r = np.mean(rewards)
+    std_r = np.std(rewards)
+
+    print("\n RISULTATI FINALI")
+    print(f"   Reward medio: {mean_r:.2f} ± {std_r:.2f}")
+    print(f"   Reward max : {np.max(rewards)}")
+    print(f"   Reward min : {np.min(rewards)}")
+    print(f"   Steps medi : {np.mean(steps_list):.1f}")
+
+    # -----------------------------------------
+    #            PLOT REWARD PER EPISODIO
+    # -----------------------------------------
+    plt.figure(figsize=(10, 4))
+    plt.plot(rewards, marker="o", alpha=0.7)
+    plt.axhline(mean_r, color="red", linestyle="--", label=f"Mean = {mean_r:.1f}")
+    plt.title(f"Performance su {env_test}")
+    plt.xlabel("Episodio")
+    plt.ylabel("Reward")
+    plt.grid(True, alpha=0.3)
+    plt.legend()
+    plt.show()
+    if render:
+        p.terminate()
+        p.join()
+    return {
+        "rewards": rewards,
+        "mean": mean_r,
+        "std": std_r,
+        "steps": steps_list
+    }
+
+
+
+
+# ---------------------------------------------------------
+#                      ESEMPIO USO
+# ---------------------------------------------------------
+if __name__ == "__main__":
+    # Cambia questi due parametri.
+    #test_model(
+    #    path_model="Reinforcement_Learning_CartLunar/cartpole/run_04_12_25T15_48/best_model.pth",
+    #    env_test="CartPole-v1",
+    #    num_episode=50,
+    #    render=False
+    #)
+    test_model(
+        path_model="Reinforcement_Learning_CartLunar/lunars/run_06_12_25T16_11/best_model.pth",
+        env_test="LunarLander-v3",
+        num_episode=100,
+        render=False,
+        name_key="lunars"
+    )
+    
+

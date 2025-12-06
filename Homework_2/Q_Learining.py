@@ -29,14 +29,11 @@ np.random.seed(seed)
 # 3. PyTorch (pesi della rete, dropout se presente)
 torch.manual_seed(seed)
 torch.cuda.manual_seed(seed)
-torch.cuda.manual_seed_all(seed)  # se multi-GPU
+torch.cuda.manual_seed_all(seed) 
 
 # 4. PyTorch CUDA backend (per performance riproducibili)
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
-
-# 5. Environment (se supporta il seed)
-# Nota: alcuni ambienti non sono completamente deterministici
 
     
 '''
@@ -335,7 +332,7 @@ class DQNAgent:
             self.writer.add_scalar("Training/Reward", episode_reward,episode)
         self._save_checkpoint(episode,False,best_model)
 
-        self.evaluation(env_val , num_episode_val)
+        self.evaluation(env_val , 50)
 
         return episode_rewards
 
