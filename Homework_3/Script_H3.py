@@ -223,9 +223,9 @@ def tokenizer_fn(batch):
     )
 
 # %%
-tokenized_train= train_dataset.map(tokenizer_fn, batched=True)
-tokenized_validation= valid_dataset.map(tokenizer_fn, batched=True)
-tokenized_test= test_dataset.map(tokenizer_fn, batched=True )
+#tokenized_train= train_dataset.map(tokenizer_fn, batched=True)
+#tokenized_validation= valid_dataset.map(tokenizer_fn, batched=True)
+#tokenized_test= test_dataset.map(tokenizer_fn, batched=True )
 
 # %%
 #print(tokenized_train)
@@ -242,6 +242,18 @@ from transformers import DistilBertTokenizer, DistilBertForSequenceClassificatio
 
 tokenizer= DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
 model = DistilBertForSequenceClassification.from_pretrained('distilbert-base-uncased')
+
+def tokenizer_fn_v2(batch):
+    return tokenizer(
+        batch["text"],
+        padding= True,
+        truncation= True,
+        return_tensors="pt" 
+    )
+
+tokenized_train= train_dataset.map(tokenizer_fn_v2, batched=True)
+tokenized_validation= valid_dataset.map(tokenizer_fn_v2, batched=True)
+tokenized_test= test_dataset.map(tokenizer_fn, batched=True )
 
 # %% [markdown]
 # #### Exercise 2.3: Fine-tuning Distilbert
@@ -299,6 +311,8 @@ def build_trainer(model, tokenizer, output_dir, train_dataset, eval_dataset, num
 
 
 # %%
+#da quello che viene letto, essendo solo fine tuning sull' ultimo layer di classificazione, quello che si legge
+#è che il numero di epoche risulta relativamente basso, infatti parlano di 3-5 epoche 
 tokenizer= DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
 model = DistilBertForSequenceClassification.from_pretrained('distilbert-base-uncased')
 
@@ -310,8 +324,8 @@ general_dir= "Trainer_Distilbert"
 dir= f'{general_dir}/run_{formatted_data}'
 os.makedirs(dir, exist_ok=True)
 
-trainer= build_trainer(model, tokenizer, dir, tokenized_train, tokenized_validation,10,8,8)
-
+trainer= build_trainer(model, tokenizer, dir, tokenized_train, tokenized_validation,5,4,4)
+print("start Training")
 trainer.train()
 
 
