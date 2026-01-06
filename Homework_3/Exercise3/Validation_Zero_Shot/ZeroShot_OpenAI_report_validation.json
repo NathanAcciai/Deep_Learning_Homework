@@ -1,0 +1,5 @@
+{
+    "accuracy": null,
+    "classification_report": "                precision    recall  f1-score   support\n\n         tench       0.96      1.00      0.98       963\n      springer       0.98      0.94      0.96       955\ncasette_player       0.95      0.99      0.97       993\n     chain_saw       0.99      0.94      0.97       858\n        church       0.99      0.99      0.99       941\n   French_horn       0.95      0.99      0.97       956\n garbage_truck       0.99      1.00      0.99       961\n      gas_pump       0.99      0.98      0.99       931\n     gold_ball       0.99      0.94      0.96       951\n     parachute       0.98      0.96      0.97       960\n\n      accuracy                           0.98      9469\n     macro avg       0.98      0.98      0.98      9469\n  weighted avg       0.98      0.98      0.98      9469\n",
+    "confusion_matrix": null
+}
