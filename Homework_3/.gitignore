@@ -1,0 +1,11 @@
+# Ignora tutte le cartelle che iniziano con "checkpoint"
+checkpoint*/
+checkpoint*/** 
+
+# Altri file o cartelle tipici da ignorare in ML/DL
+logs/
+*.pt
+*.ckpt
+*.tar.gz
+__pycache__/
+*.pyc
