@@ -1,0 +1,15 @@
+{
+    "accuracy": null,
+    "classification_report": {
+        "eval_loss": 0.6871641874313354,
+        "eval_accuracy": 0.8442776735459663,
+        "eval_precision": 0.8442825210764384,
+        "eval_recall": 0.8442776735459663,
+        "eval_f1-score": 0.8442771253977641,
+        "eval_runtime": 3.7828,
+        "eval_samples_per_second": 281.8,
+        "eval_steps_per_second": 17.712,
+        "epoch": 3.0
+    },
+    "confusion_matrix": null
+}
