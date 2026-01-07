@@ -436,10 +436,16 @@ processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch16")
 
 
 # %%
-dataset = load_dataset("Sijuade/ImageNette")
-dataset_train= load_dataset("Sijuade/ImageNette", split="train")
-dataset_validation= load_dataset("Sijuade/ImageNette", split="validation")
+#Imagenette
+#dataset = load_dataset("Sijuade/ImageNette")
+#dataset_train= load_dataset("Sijuade/ImageNette", split="train")
+#dataset_validation= load_dataset("Sijuade/ImageNette", split="validation")
 
+#TinyImagenet
+dataset_train= load_dataset("Multimodal-Fatima/TinyImagenet_train", split="train")
+dataset_validation= load_dataset("Multimodal-Fatima/TinyImagenet_validation", split="validation")
+dataset_train=dataset_train.remove_columns("id")
+dataset_validation= dataset_validation.remove_columns("id")
 
 
 # %% [markdown]
@@ -496,15 +502,15 @@ def Validation_zero_shot():
     all_preds = np.array(all_preds)
     all_labels = np.array(all_labels)
 
-    report= classification_report(all_labels, all_preds,  target_names=class_names)
+    report= classification_report(all_labels, all_preds, output_dict=True, target_names=class_names)
     print(report)
     return report
 
 
 # %%
-repo_zero_shot= Validation_zero_shot()
-dir= "Exercise3/ImageNette/Validation_Zero_Shot"
-save_report(dir,report=repo_zero_shot,name_model="ZeroShot_OpenAI")
+#repo_zero_shot= Validation_zero_shot()
+#dir= "Exercise3/TinyImagenet/Validation_Zero_Shot"
+#save_report(dir,report=repo_zero_shot,name_model="ZeroShot_OpenAI")
 
 
 # %% [markdown]
@@ -638,16 +644,17 @@ optimizer = torch.optim.AdamW(
     weight_decay=1e-4
 )
 
-num_epochs = 5
+num_epochs = 3
 now = datetime.now()
 formatted_data = now.strftime("%Y-%m-%d_%H-%M-%S")
-dir_checkpoint_general="Exercise3/ImageNette/Lora_Fine-Tuning/Vision_Encoder"
+dir_checkpoint_general="Exercise3/TinyImagenet/Lora_Fine-Tuning/Vision_Encoder"
 dir_checkpoint= f'{dir_checkpoint_general}/run_{formatted_data}'
 os.makedirs(dir_checkpoint, exist_ok=True)
 tb_dir = f"{dir_checkpoint}/tensorboard"
 writer = SummaryWriter(log_dir=tb_dir)
-train_dataloader= DataLoader(train_dataset_converted,batch_size=16, collate_fn=collate_fn, shuffle=True)
+train_dataloader= DataLoader(train_dataset_converted,batch_size=32, collate_fn=collate_fn, shuffle=True)
 val_dataloader=  DataLoader(validation_dataset_converted,batch_size=16, collate_fn=collate_fn)
+
 count=0
 for epoch in range(num_epochs):
     print(f"\nEpoch {epoch+1}/{num_epochs}")
@@ -676,7 +683,7 @@ for epoch in range(num_epochs):
     writer.add_scalar("Metrics/F1_macro", f1_macro, epoch)
 
     repo_validation=print_report(val_labels,val_preds, class_names)
-    if epoch < count:
+    if num_epochs != count-1:
        save_report(dir_checkpoint_general, report=repo_validation,name_model=f"checkpoint_epoch{count}")
     else:
         save_report(dir_checkpoint_general, report=repo_validation,name_model=f"final_val_epoch{count}")
