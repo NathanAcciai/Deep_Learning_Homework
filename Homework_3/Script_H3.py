@@ -530,8 +530,9 @@ def build_Lora_Config(model, text_encoder=True, visual_encoder=False):
         model.text_model= get_peft_model( model.text_model, config)
     if visual_encoder:
         model.vision_model= get_peft_model( model.vision_model, config)
-    print(f"Text model params:")
-    model.text_model.print_trainable_parameters()
+    if text_encoder:
+        print(f"Text model params:")
+        model.text_model.print_trainable_parameters()
     if visual_encoder:
         print(f"Vision model params:")
         model.vision_model.print_trainable_parameters()
@@ -552,7 +553,7 @@ def print_report(all_labels, all_preds, class_names):
 
 
 # %%
-model_lora=build_Lora_Config(model)
+model_lora=build_Lora_Config(model,text_encoder=False, visual_encoder=True)
 
 # %%
 def train_one_epoch(
@@ -638,7 +639,7 @@ optimizer = torch.optim.AdamW(
 num_epochs = 5
 now = datetime.now()
 formatted_data = now.strftime("%Y-%m-%d_%H-%M-%S")
-dir_checkpoint_general="Exercise3/Lora_Fine-Tuning/Text_Encoder"
+dir_checkpoint_general="Exercise3/Lora_Fine-Tuning/Vision_Encoder"
 dir_checkpoint= f'{dir_checkpoint_general}/run_{formatted_data}'
 os.makedirs(dir_checkpoint, exist_ok=True)
 tb_dir = f"{dir_checkpoint}/tensorboard"
