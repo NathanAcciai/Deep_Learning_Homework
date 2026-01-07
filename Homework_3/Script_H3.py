@@ -438,7 +438,9 @@ processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch16")
 # %%
 dataset = load_dataset("Sijuade/ImageNette")
 dataset_train= load_dataset("Sijuade/ImageNette", split="train")
-dataset_validation= load_dataset("Sijuade/ImageNette", split="train")
+dataset_validation= load_dataset("Sijuade/ImageNette", split="validation")
+
+
 
 # %% [markdown]
 # Il problema è che qua le immagini corrispondono a label e questo ovviamente porta a delle problematiche ecco perchè si parla di fine-tuning.
@@ -500,9 +502,9 @@ def Validation_zero_shot():
 
 
 # %%
-#repo_zero_shot= Validation_zero_shot()
-#dir= "Exercise3/Validation_Zero_Shot"
-#save_report(dir,report=repo_zero_shot,name_model="ZeroShot_OpenAI")
+repo_zero_shot= Validation_zero_shot()
+dir= "Exercise3/ImageNette/Validation_Zero_Shot"
+save_report(dir,report=repo_zero_shot,name_model="ZeroShot_OpenAI")
 
 
 # %% [markdown]
@@ -639,7 +641,7 @@ optimizer = torch.optim.AdamW(
 num_epochs = 5
 now = datetime.now()
 formatted_data = now.strftime("%Y-%m-%d_%H-%M-%S")
-dir_checkpoint_general="Exercise3/Lora_Fine-Tuning/Vision_Encoder"
+dir_checkpoint_general="Exercise3/ImageNette/Lora_Fine-Tuning/Vision_Encoder"
 dir_checkpoint= f'{dir_checkpoint_general}/run_{formatted_data}'
 os.makedirs(dir_checkpoint, exist_ok=True)
 tb_dir = f"{dir_checkpoint}/tensorboard"
