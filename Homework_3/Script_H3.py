@@ -21,7 +21,6 @@ import json
 from datetime import datetime
 import os
 from torch.utils.tensorboard import SummaryWriter
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 
 # %% [markdown]
@@ -477,7 +476,7 @@ def collate_fn(batch):
 
 # %%
 def Validation_zero_shot():
-    device= "cuda:0"
+    device= "cuda:1"
     dataloader_validation= DataLoader(validation_dataset_converted,batch_size=512, collate_fn=collate_fn)
     all_preds=[]
     all_labels=[]
@@ -561,7 +560,7 @@ def print_report(all_labels, all_preds, class_names):
 
 
 # %%
-model_lora=build_Lora_Config(model,text_encoder=False, visual_encoder=True)
+model_lora=build_Lora_Config(model,text_encoder=True, visual_encoder=False)
 
 # %%
 def train_one_epoch(
@@ -636,7 +635,7 @@ def evaluate(
 
 
 # %%
-device = "cuda:0" if torch.cuda.is_available() else "cpu"
+device = "cuda:1" if torch.cuda.is_available() else "cpu"
 model_lora.to(device)
 optimizer = torch.optim.AdamW(
     model.parameters(),
@@ -647,12 +646,12 @@ optimizer = torch.optim.AdamW(
 num_epochs = 3
 now = datetime.now()
 formatted_data = now.strftime("%Y-%m-%d_%H-%M-%S")
-dir_checkpoint_general="Exercise3/TinyImagenet/Lora_Fine-Tuning/Vision_Encoder"
+dir_checkpoint_general="Exercise3/TinyImagenet/Lora_Fine-Tuning/Text_Encoder"
 dir_checkpoint= f'{dir_checkpoint_general}/run_{formatted_data}'
 os.makedirs(dir_checkpoint, exist_ok=True)
 tb_dir = f"{dir_checkpoint}/tensorboard"
 writer = SummaryWriter(log_dir=tb_dir)
-train_dataloader= DataLoader(train_dataset_converted,batch_size=32, collate_fn=collate_fn, shuffle=True)
+train_dataloader= DataLoader(train_dataset_converted,batch_size=48, collate_fn=collate_fn, shuffle=True)
 val_dataloader=  DataLoader(validation_dataset_converted,batch_size=16, collate_fn=collate_fn)
 
 count=0
