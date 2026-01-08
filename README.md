@@ -1,5 +1,7 @@
 This repo contains three exercise of Deep Learning Applications, and a presentation of conference paper in Reinforcement Learning.
+
 The tree exercise is:
+
 -Homework 1: CNN
 -Homework 2: DRL
 -Homework 3: Transformer
