@@ -1,0 +1,79 @@
+{
+    "accuracy": 0.9959322033898305,
+    "classification_report": {
+        "tench": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1-score": 1.0,
+            "support": 437
+        },
+        "springer": {
+            "precision": 1.0,
+            "recall": 0.9955056179775281,
+            "f1-score": 0.9977477477477478,
+            "support": 445
+        },
+        "casette_player": {
+            "precision": 0.9926650366748166,
+            "recall": 0.9975429975429976,
+            "f1-score": 0.9950980392156863,
+            "support": 407
+        },
+        "chain_saw": {
+            "precision": 0.9908045977011494,
+            "recall": 0.9885321100917431,
+            "f1-score": 0.9896670493685419,
+            "support": 436
+        },
+        "church": {
+            "precision": 0.9956616052060737,
+            "recall": 1.0,
+            "f1-score": 0.9978260869565216,
+            "support": 459
+        },
+        "French_horn": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1-score": 1.0,
+            "support": 444
+        },
+        "garbage_truck": {
+            "precision": 0.9954441913439636,
+            "recall": 0.9954441913439636,
+            "f1-score": 0.9954441913439636,
+            "support": 439
+        },
+        "gas_pump": {
+            "precision": 0.9872881355932204,
+            "recall": 0.9936034115138592,
+            "f1-score": 0.9904357066950054,
+            "support": 469
+        },
+        "gold_ball": {
+            "precision": 1.0,
+            "recall": 0.9933184855233853,
+            "f1-score": 0.9966480446927374,
+            "support": 449
+        },
+        "parachute": {
+            "precision": 0.9977220956719818,
+            "recall": 0.9954545454545455,
+            "f1-score": 0.9965870307167236,
+            "support": 440
+        },
+        "accuracy": 0.9959322033898305,
+        "macro avg": {
+            "precision": 0.9959585662191206,
+            "recall": 0.9959401359448024,
+            "f1-score": 0.9959453896736926,
+            "support": 4425
+        },
+        "weighted avg": {
+            "precision": 0.995943504859397,
+            "recall": 0.9959322033898305,
+            "f1-score": 0.9959338461398,
+            "support": 4425
+        }
+    },
+    "confusion_matrix": null
+}
