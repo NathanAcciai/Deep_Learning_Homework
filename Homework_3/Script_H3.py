@@ -441,10 +441,30 @@ processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch16")
 #dataset_validation= load_dataset("Sijuade/ImageNette", split="validation")
 
 #TinyImagenet
-dataset_train= load_dataset("Multimodal-Fatima/TinyImagenet_train", split="train")
-dataset_validation= load_dataset("Multimodal-Fatima/TinyImagenet_validation", split="validation")
-dataset_train=dataset_train.remove_columns("id")
-dataset_validation= dataset_validation.remove_columns("id")
+#dataset_train= load_dataset("Multimodal-Fatima/TinyImagenet_train", split="train")
+#dataset_validation= load_dataset("Multimodal-Fatima/TinyImagenet_validation", split="validation")
+#dataset_train=dataset_train.remove_columns("id")
+#dataset_validation= dataset_validation.remove_columns("id")
+#
+#class_names= dataset_train.features["label"].names
+#Sketch Datatset Imagnet
+
+dataset= load_dataset("clip-benchmark/wds_imagenet_sketch")
+with open("classnames.txt", "r", encoding="utf-8") as f:
+    class_names = [line.rstrip("\n") for line in f]
+split_dataset = dataset["test"].train_test_split(test_size=0.2, seed=42)
+dataset_train =split_dataset["train"]
+dataset_test= split_dataset["test"]
+unique_labels = list(set(dataset_train["cls"]))
+dataset_train=dataset_train.remove_columns(["__key__", "__url__"])
+dataset_test= dataset_test.remove_columns(["__key__", "__url__"])
+map_name_column= dict({
+    "cls" : "label",
+    "jpg": "image"
+})
+dataset_train=dataset_train.rename_columns(map_name_column)
+dataset_validation= dataset_test.rename_columns(map_name_column)
+
 
 
 # %% [markdown]
@@ -453,7 +473,7 @@ dataset_validation= dataset_validation.remove_columns("id")
 # come " questa è una figura di: "
 
 # %%
-class_names= dataset_train.features["label"].names
+
 
 def label_to_prompt(batch):
     readable_name = class_names[batch['label']].replace('_', ' ')
@@ -508,7 +528,7 @@ def Validation_zero_shot():
 
 # %%
 #repo_zero_shot= Validation_zero_shot()
-#dir= "Exercise3/TinyImagenet/Validation_Zero_Shot"
+#dir= "Exercise3/SketchImageNet/Validation_Zero_Shot"
 #save_report(dir,report=repo_zero_shot,name_model="ZeroShot_OpenAI")
 
 
@@ -560,7 +580,7 @@ def print_report(all_labels, all_preds, class_names):
 
 
 # %%
-model_lora=build_Lora_Config(model,text_encoder=True, visual_encoder=False)
+model_lora=build_Lora_Config(model,text_encoder=False, visual_encoder=True)
 
 # %%
 def train_one_epoch(
@@ -646,13 +666,13 @@ optimizer = torch.optim.AdamW(
 num_epochs = 3
 now = datetime.now()
 formatted_data = now.strftime("%Y-%m-%d_%H-%M-%S")
-dir_checkpoint_general="Exercise3/TinyImagenet/Lora_Fine-Tuning/Text_Encoder"
+dir_checkpoint_general="Exercise3/SketchImageNet/Lora_Fine-Tuning/Vision_Encoder"
 dir_checkpoint= f'{dir_checkpoint_general}/run_{formatted_data}'
 os.makedirs(dir_checkpoint, exist_ok=True)
 tb_dir = f"{dir_checkpoint}/tensorboard"
 writer = SummaryWriter(log_dir=tb_dir)
-train_dataloader= DataLoader(train_dataset_converted,batch_size=48, collate_fn=collate_fn, shuffle=True)
-val_dataloader=  DataLoader(validation_dataset_converted,batch_size=16, collate_fn=collate_fn)
+train_dataloader= DataLoader(train_dataset_converted,batch_size=4, collate_fn=collate_fn, shuffle=True)
+val_dataloader=  DataLoader(validation_dataset_converted,batch_size=4, collate_fn=collate_fn)
 
 count=0
 for epoch in range(num_epochs):
@@ -682,7 +702,7 @@ for epoch in range(num_epochs):
     writer.add_scalar("Metrics/F1_macro", f1_macro, epoch)
 
     repo_validation=print_report(val_labels,val_preds, class_names)
-    if num_epochs != count-1:
+    if num_epochs != count+1 :
        save_report(dir_checkpoint_general, report=repo_validation,name_model=f"checkpoint_epoch{count}")
     else:
         save_report(dir_checkpoint_general, report=repo_validation,name_model=f"final_val_epoch{count}")
