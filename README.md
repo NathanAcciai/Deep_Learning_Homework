@@ -3,7 +3,9 @@ This repo contains three exercise of Deep Learning Applications, and a presentat
 The tree exercise is:
 
 -Homework 1: CNN
+
 -Homework 2: DRL
+
 -Homework 3: Transformer
 
 The paper for the presentations is "1000 Layer Networks for Self-Supervised RL: Scaling
