@@ -864,13 +864,13 @@ model
 def Load_configuration():
     return {
     "adam": {
-        "lr": 5e-4,
-        "weight_decay": 5e-5,
+        "lr": 1e-4,
+        "weight_decay": 1e-5,
         "momentum": None  # non serve per AdamW
     },
     "adamw": {
-        "lr": 5e-4,
-        "weight_decay": 5e-5,
+        "lr": 1e-4,
+        "weight_decay": 1e-5,
         "momentum": None  # non serve per AdamW
     },
     "sgd": {
@@ -898,7 +898,7 @@ depth =6
 num_classes= 100
 
 model, hyperparametres= Load_model(path_model_CNN, in_channels, out_channels)
-block_unfreeze = [ "blocks.1","blocks.2","blocks.3", "fully_connected"]
+block_unfreeze = [ "blocks.1","blocks.2","blocks.3","blocks.4" ,"fully_connected"]
 optimizer=["adamw", "sgd", "rmsprop","adam"]
 classificator=["svm", "knn", "gaussian"]
 
@@ -907,7 +907,7 @@ cifar_train ,cifar_test= Load_data_Cifar100()
 config_optim=Load_configuration()
 
 
-for freeze_layers in [False,True]:
+for freeze_layers in [True]:
     if freeze_layers==False:
         for cl in classificator:
             clear_output(wait=True)
