@@ -17,3 +17,7 @@ Deep_Learning_Application/Homework_1/data/cifar-10-python.tar.gz
 Homework_1/data/cifar-10-python.tar.gz
 *.tar.gz
 Homework_1/data/cifar-10-batches-py/
+
+wandb/*
+wandb/
+wandb*
