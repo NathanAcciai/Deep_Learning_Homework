@@ -203,11 +203,12 @@ from torch.utils.tensorboard import SummaryWriter
 from torch.utils.data import DataLoader
 import datetime
 from tqdm import tqdm
-from sklearn.metrics import accuracy_score, classification_report
+from sklearn.metrics import accuracy_score, classification_report, precision_score, recall_score, f1_score
 import json
 from sklearn.svm import LinearSVC
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.naive_bayes import GaussianNB
+from IPython.display import clear_output
 
 # %%
 seed= 123
@@ -340,8 +341,11 @@ def Training_Model(model,X, file_writer,device,optimizer=None,epochs=50,batch_si
             losses.append(loss.item())
         
         loss_average= np.mean(losses)
-        print(loss_average)
+        print(f"Epoch: {epoch}")
+        print(f"Training Loss: {loss_average}")
+        
         accurancy, report_dict, losses_val= Validation_Model(model, ds_val, device, batch_size)
+        print(f"\n Validation Loss: {losses_val}")
         file_writer.add_scalars(
                 "Loss",
                 {
@@ -375,7 +379,6 @@ class Feature_Extractor(nn.Module):
 def features_extractor(datloader, model,device,file_writer):
     features=[]
     labels= []
-    model.eval()
     with torch.no_grad():
         for data, label in datloader:
             data= data.to(device)
@@ -392,18 +395,31 @@ def features_extractor(datloader, model,device,file_writer):
 # %%
 def custom_classifier(model,train_loader, test_loader, device, file_writer,type_of_classifier="svm"):
     model= Feature_Extractor(model)
+    model= model.to(device)
     features_train, labels_train=features_extractor(train_loader, model,device, file_writer)
     features_test, labels_test=features_extractor(test_loader, model,device, file_writer)
 
     if type_of_classifier=="svm":
-        clf= LinearSVC(max_iter=10000)
+        clf= LinearSVC(max_iter=2000)
     elif type_of_classifier=="knn":
-        clf = KNeighborsClassifier(n_neighbors=25)
+        clf = KNeighborsClassifier(n_neighbors=5)
     else:
         clf= GaussianNB()
     clf.fit(features_train,labels_train)
     acc= clf.score(features_test,labels_test) *100
     file_writer.add_scalar("Accurancy", acc, 0)
+    y_pred = clf.predict(features_test)
+    acc = accuracy_score(labels_test, y_pred)
+    precision = precision_score(labels_test, y_pred, average="macro")
+    recall = recall_score(labels_test, y_pred, average="macro")
+    f1 = f1_score(labels_test, y_pred, average="macro")
+
+    file_writer.add_scalar("Accuracy", acc * 100, 0)
+    file_writer.add_scalar("Precision_macro", precision * 100, 0)
+    file_writer.add_scalar("Recall_macro", recall * 100, 0)
+    file_writer.add_scalar("F1_macro", f1 * 100, 0)
+
+
     return acc
 
 
@@ -422,18 +438,16 @@ def fine_tuning(model, device, num_classes, optim, learning_rate,weight_decay, m
     for name, param in model.named_parameters():
         if any(b in name for b in block_unfreeze):
             param.requires_grad= True 
-    for param in model.fully_connected.parameters():
-        param.requires_grad = True
     
-    optim_param= filter(lambda p: p.requires_grad, model.parameters())
+    trainable_params = filter(lambda p: p.requires_grad, model.parameters())
     if optim=="adam":
-        optimizer = torch.optim.Adam(optim_param, lr=learning_rate, weight_decay=weight_decay)
+        optimizer = torch.optim.Adam(trainable_params, lr=learning_rate, weight_decay=weight_decay)
     elif optim=="adamw":
-        optimizer = torch.optim.AdamW(optim_param, lr=learning_rate, weight_decay=weight_decay)
+        optimizer = torch.optim.AdamW(trainable_params, lr=learning_rate, weight_decay=weight_decay)
     elif optim=="sgd":
-        optimizer= torch.optim.SGD(optim_param,lr=learning_rate,momentum=momentum, weight_decay=weight_decay)
+        optimizer= torch.optim.SGD(trainable_params,lr=learning_rate,momentum=momentum, weight_decay=weight_decay)
     else:
-        optimizer=torch.optim.RMSprop(optim_param,lr=learning_rate,momentum=momentum, weight_decay=weight_decay)
+        optimizer=torch.optim.RMSprop(trainable_params,lr=learning_rate,momentum=momentum, weight_decay=weight_decay)
     
     return model, optimizer
                
@@ -451,7 +465,7 @@ def Customize_model(model, X_train, X_test, file_writer,num_classes, device,
                     lr, weight_decay, batch_size,freeze_layers,cl,optim, momentum,
                     block_unfreeze):
     
-    train_loader = DataLoader(X_train, batch_size=batch_size, shuffle=True) 
+    train_loader = DataLoader(X_train, batch_size=batch_size, shuffle=False) 
     test_loader  = DataLoader(X_test, batch_size=batch_size, shuffle=False)
 
     if freeze_layers==False:
@@ -544,7 +558,7 @@ class Trainer(nn.Module):
             os.makedirs(self.path_experiments)
         self.save_hyperparametres()
         self.model.to(self.device)
-        self.best_model= Training_Model(self.model,X, self.file_writer,self.device, self.optimizer,self.epochs,self.batch_size, self.learning_rate, self.weight_decay,self.study_grad)
+        self.best_model= Training_Model(self.model,X, self.file_writer,self.device, self.optimizer,self.epochs,self.batch_size, self.learning_rate, self.weight_decay)
         torch.save(self.best_model.state_dict(), os.path.join(self.path_experiments,'best_model.pt'))
 
     def Fine_Tuning(self,X_train,X_test):
@@ -564,8 +578,8 @@ class Trainer(nn.Module):
         
         if type=="fine_tuning":
             self.model, self.optimizer= result
-        self.Train(X_train)
-        self.Test(X_test)
+            self.Train(X_train)
+            self.Test(X_test)
 
     def Test(self,X, model=None):
         if model is None:
@@ -588,6 +602,7 @@ class Trainer(nn.Module):
 #data_ora_formattata = now.strftime("%d_%m_%yT%H_%M")
 #name= f'run_{data_ora_formattata}'
 #logdir= f'tensorboard/Sample_MLP/{name}'
+#print(f"Train Model Sample MLP on MNIST")
 #input_size = 28*28
 #width = 16
 #depth = 2
@@ -599,7 +614,7 @@ class Trainer(nn.Module):
 #
 #trainer.Train(minist_train)
 #trainer.Test(minist_test)
-#
+
 
 
 # %% [markdown]
@@ -615,15 +630,15 @@ class Trainer(nn.Module):
 #now= datetime.datetime.now()
 #data_ora_formattata = now.strftime("%d_%m_%yT%H_%M")
 #name= f'run_{data_ora_formattata}'
-#
+#print("Training Residual Net vs Simple MLP")
 #input_size = 28*28
 #width = 16
 #depths = [2,6,10]
+#
 #minist_train, minist_test= Load_Data()
 #
 #for depth in depths:
 #    for use_skip in [True,False]:
-#        
 #        channels= [input_size] + [width]*depth + [10]
 #        model= My_MLP(channels,use_skip=use_skip )
 #        if use_skip:
@@ -636,10 +651,18 @@ class Trainer(nn.Module):
 #            logdir= f'tensorboard/Residual_vs_Simple_MLP/{name}/Simple_depth{depth}'
 #            path=f"Residual_vs_Simple_MLP/Simple_depth{depth}"
 #            
-#        trainer= Trainer(model,logdir,data_ora_formattata,minist_train.classes,depth,100,128,0.001,0.001,path,True)
+#        trainer= Trainer(model,logdir,data_ora_formattata,minist_train.classes,0,100,128,0.001,0.001,path,True)
 #
 #        trainer.Train(minist_train)
 #        trainer.Test(minist_test)
+
+
+# %% [markdown]
+# Classic MLP (without skip connections):
+# In the gradient plots, a typical phenomenon of deep networks can be observed: the gradient norms decrease rapidly in the deeper layers, close to the input. This is caused by the vanishing gradient problem, where the error signal backpropagating through the network becomes progressively attenuated. As a result, the early layers receive very small gradients, update their weights slowly, and contribute little to learning. This explains why a classic MLP takes longer to converge and may get stuck at relatively low performance.    
+# 
+# MLP with skip connections:
+# Adding bypass connections between layers allows gradients to skip certain layers and reach deeper layers more easily. In the gradnorm plots, it can be observed that the gradients remain more balanced across all layers, including the deeper ones. This enables the early layers to update more effectively, improving training stability and accelerating convergence. In fact, skip connections mitigate the vanishing gradient problem, making the learning of deep layers more efficient.
 
 # %% [markdown]
 # ### Exercise 1.3: Rinse and Repeat (but with a CNN)
@@ -693,8 +716,8 @@ class Residual_Block_CNN(nn.Module):
         else:
             identity= x
             out= self.first_layer(x)
-            out= self.relu(out)
-            out= self.second_layer(out)
+            out= self.relu(x)
+            out= self.second_layer(x)
             out= out  + identity
             return self.relu(out)
 
@@ -770,7 +793,7 @@ class CNN_Customize(nn.Module):
 #            
 #            use_res=False
 #        model= CNN_Customize(depth,in_channels,out_channels,num_classes,use_skip,use_res)
-#        trainer= Trainer(model,logdir,data_ora_formattata,num_classes,depth,100,128,0.001,0.001,path)
+#        trainer= Trainer(model,logdir,data_ora_formattata,num_classes,0,depth,100,128,0.001,0.001,path)
 #
 #        trainer.Train(cifar_train)
 #        trainer.Test(cifartest)
@@ -801,8 +824,8 @@ class CNN_Customize(nn.Module):
 # %%
 def Load_data_Cifar100():
     transform = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+    transforms.ToTensor(),
+    transforms.Normalize((0.5,), (0.5,))
     ])
     train_cifar100 = torchvision.datasets.CIFAR100(root='./data', train=True, download=True, transform=transform)
     test_cifar100 = torchvision.datasets.CIFAR100(root='./data', train=False, download=True, transform=transform)
@@ -832,30 +855,35 @@ def Load_model(path,in_channels, out_channels, verbose=False):
     
 
 # %%
+model ,h=Load_model("CNN_Residual_vs_Base/Residual_depth6/Run_10_09_25T09_41",3, 64)
+
+# %%
+model
+
+# %%
 def Load_configuration():
     return {
-        "adam": {
-            "lr": 1e-4,
-            "weight_decay": 1e-5,
-            "momentum": None  # non serve per Adam
-        },
-        "adamw": {
-            "lr": 1e-4,
-            "weight_decay": 1e-5,
-            "momentum": None  # non serve per AdamW
-        },
-        "sgd": {
-            "lr": 1e-4,
-            "weight_decay": 1e-4,
-            "momentum": 0.9
-        },
-        "rmsprop": {
-            "lr": 1e-4,
-            "weight_decay": 1e-5,
-            "momentum": 0.9
-        }
+    "adam": {
+        "lr": 5e-4,
+        "weight_decay": 5e-5,
+        "momentum": None  # non serve per AdamW
+    },
+    "adamw": {
+        "lr": 5e-4,
+        "weight_decay": 5e-5,
+        "momentum": None  # non serve per AdamW
+    },
+    "sgd": {
+        "lr": 1e-4,
+        "weight_decay": 5e-4,
+        "momentum": 0.9
+    },
+    "rmsprop": {
+        "lr": 1e-5,
+        "weight_decay": 5e-4,
+        "momentum": 0.9
     }
-
+}
 
 
 # %%
@@ -870,7 +898,7 @@ depth =6
 num_classes= 100
 
 model, hyperparametres= Load_model(path_model_CNN, in_channels, out_channels)
-block_unfreeze = [ "blocks.2","blocks.3","blocks.4", "blocks.5", "fully_connected"]
+block_unfreeze = [ "blocks.1","blocks.2","blocks.3", "fully_connected"]
 optimizer=["adamw", "sgd", "rmsprop","adam"]
 classificator=["svm", "knn", "gaussian"]
 
@@ -879,16 +907,18 @@ cifar_train ,cifar_test= Load_data_Cifar100()
 config_optim=Load_configuration()
 
 
-for freeze_layers in [True,False]:
+for freeze_layers in [False,True]:
     if freeze_layers==False:
         for cl in classificator:
+            clear_output(wait=True)
             print(f'BaseLine with CNN Extract Feature with classificator: {cl}')
             logdirs= f'tensorboard/Reusing_Model/Classification_{name}/Classificator_{cl}'
             path= f'Reusing_Model/Classification_{name}/Classificator_{cl}'
-            trainer= Trainer(model,logdirs,data_ora_formattata,num_classes,depth,100,128,freeze_layers=freeze_layers,classificator=cl)
+            trainer= Trainer(model,logdirs,data_ora_formattata,num_classes,depth,0,128,freeze_layers=freeze_layers,classificator=cl)
             trainer.Fine_Tuning(cifar_train,cifar_test)
     else:
         for optim in optimizer:
+            clear_output(wait=True)
             model, hyperparametres= Load_model(path_model_CNN, in_channels, out_channels)
             if optim=="adam":
                 print(f'Fine tuning CNN model only with unfreeze last layers')
@@ -898,9 +928,44 @@ for freeze_layers in [True,False]:
                 print(f'Fine_Tuning model with unfreeze layers with optimizer {optim}')
                 logdirs= f'tensorboard/Reusing_Model/Fine_Tuning_{name}/Optimizer_{optim}'
                 path=f'Reusing_Model/Fine_Tuning_{name}/Optimizer_{optim}'
-            trainer= Trainer(model,logdirs,data_ora_formattata,num_classes,depth,100,128,
+            trainer= Trainer(model,logdirs,data_ora_formattata,num_classes,depth,50,512,
                              config_optim[optim]["lr"],config_optim[optim]["weight_decay"],
                              path,False,freeze_layers,None,optim,config_optim[optim]["momentum"],block_unfreeze)
             trainer.Fine_Tuning(cifar_train,cifar_test)
 
 print("finsh Fine Tuning")
+
+# %% [markdown]
+# Fine-tuning the pre-trained residual CNN on CIFAR-10 for CIFAR-100 generally does not exceed 30–40% accuracy. This is mainly due to two reasons. First, the network has all blocks with only 64 channels, so its representational capacity is limited and cannot effectively discriminate among 100 classes, many of which are similar. Second, the features learned on CIFAR-10 were optimized to distinguish 10 very different classes and are not sufficiently general for the new dataset. During fine-tuning, gradients in the early layers are very small, so the base features change little, limiting the network’s adaptation. As a result, even using the extracted features for classical classifiers, performance remains low. In summary, both the limited network capacity and the poorly adaptable features explain why fine-tuning on CIFAR-100 with this model does not work well.
+
+# %% [markdown]
+# ### Exercise 2.2: *Distill* the knowledge from a large model into a smaller one
+# In this exercise you will see if you can derive a *small* model that performs comparably to a larger one on CIFAR-10. To do this, you will use [Knowledge Distillation](https://arxiv.org/abs/1503.02531):
+# 
+# > Geoffrey Hinton, Oriol Vinyals, and Jeff Dean. Distilling the Knowledge in a Neural Network, NeurIPS 2015.
+# 
+# To do this:
+# 1. Train one of your best-performing CNNs on CIFAR-10 from Exercise 1.3 above. This will be your **teacher** model.
+# 2. Define a *smaller* variant with about half the number of parameters (change the width and/or depth of the network). Train it on CIFAR-10 and verify that it performs *worse* than your **teacher**. This small network will be your **student** model.
+# 3. Train the **student** using a combination of **hard labels** from the CIFAR-10 training set (cross entropy loss) and **soft labels** from predictions of the **teacher** (Kulback-Leibler loss between teacher and student).
+# 
+# Try to optimize training parameters in order to maximize the performance of the student. It should at least outperform the student trained only on hard labels in Setp 2.
+# 
+# **Tip**: You can save the predictions of the trained teacher network on the training set and adapt your dataloader to provide them together with hard labels. This will **greatly** speed up training compared to performing a forward pass through the teacher for each batch of training.
+
+# %%
+# Your code here.
+
+# %% [markdown]
+# ### Exercise 2.3: *Explain* the predictions of a CNN
+# 
+# Use the CNN model you trained in Exercise 1.3 and implement [*Class Activation Maps*](http://cnnlocalization.csail.mit.edu/#:~:text=A%20class%20activation%20map%20for,decision%20made%20by%20the%20CNN.):
+# 
+# > B. Zhou, A. Khosla, A. Lapedriza, A. Oliva, and A. Torralba. Learning Deep Features for Discriminative Localization. CVPR'16 (arXiv:1512.04150, 2015).
+# 
+# Use your CNN implementation to demonstrate how your trained CNN *attends* to specific image features to recognize *specific* classes. Try your implementation out using a pre-trained ResNet-18 model and some images from the [Imagenette](https://pytorch.org/vision/0.20/generated/torchvision.datasets.Imagenette.html#torchvision.datasets.Imagenette) dataset -- I suggest you start with the low resolution version of images at 160px.
+
+# %%
+# Your code here.
+
+
