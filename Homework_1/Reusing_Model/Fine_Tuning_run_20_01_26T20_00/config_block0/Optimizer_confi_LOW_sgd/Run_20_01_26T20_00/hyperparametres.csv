@@ -1,0 +1,13 @@
+Epochs,Batch size,Learning Rate,Weight Decay,Num Classes,Freeze_layers,Depth,Momentum,Optimizer,Block_Unfreeze
+30,256,0.0001,0.0001,100,True,6,0.9,"SGD (
+Parameter Group 0
+    dampening: 0
+    differentiable: False
+    foreach: None
+    fused: None
+    lr: 0.0001
+    maximize: False
+    momentum: 0.9
+    nesterov: False
+    weight_decay: 0.0001
+)","['head', 'blocks.0', 'fully_connected']"
