@@ -289,7 +289,7 @@ class DQNAgent:
         self.update_counter += 1
         if self.update_counter % self.target_update_freq == 0:
             self.q_target.load_state_dict(self.q_network.state_dict())
-        self.writer.add_scalar("Training/Loss (MSE)", loss.item(), episode)
+        self.writer.add_scalar("Training/Loss ", loss.item(), episode)
 
     def train(self,env, env_val,num_episode= 500,num_episode_val= 10):
         #collezziono i ritorni per ogni episodio
